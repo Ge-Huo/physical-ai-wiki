@@ -1,0 +1,40 @@
+site_name: 物理AI知识库
+site_url: https://physical-ai-wiki.pages.dev
+repo_url: https://github.com/你的用户名/physical-ai-wiki
+repo_name: GitHub
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: 切换暗色模式
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: 切换亮色模式
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - toc:
+      permalink: true
+
+nav:
+  - 首页: index.md
+  - 基础概念:
+    - 概述: basics/overview.md
+    - 常用术语: basics/terms.md
+  - 实用工具:
+    - 工具列表: tools/index.md
