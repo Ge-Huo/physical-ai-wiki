@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机械波 3D 可视化 - 位移指示版</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        
+        .panel {
+            position: absolute; top: 16px; left: 16px;
+            background: rgba(0,0,0,0.75); color: #fff;
+            padding: 16px; border-radius: 8px; width: 260px;
+            backdrop-filter: blur(8px); user-select: none;
+        }
+        .panel h3 { margin: 0 0 12px; font-size: 14px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        
+        #btn-pause {
+            width: 100%; padding: 8px; margin-bottom: 12px;
+            background: #4fc3f7; color: #000; border: none; border-radius: 4px;
+            font-size: 13px; font-weight: bold; cursor: pointer; transition: background 0.2s;
+        }
+        #btn-pause:hover { background: #81d4fa !important; }
+        #btn-pause.paused { background: #ff9800 !important; color: #fff !important; }
+
+        .control-group { margin-bottom: 10px; }
+        .control-group label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+        .control-group input[type=range] { width: 100%; cursor: pointer; }
+        .val { color: #4fc3f7; font-weight: bold; }
+        .hint { font-size: 11px; color: #666; margin-top: 8px; line-height: 1.4; }
+
+        #yt-panel {
+            position: absolute; bottom: 16px; right: 16px;
+            background: rgba(0,0,0,0.85); border: 1px solid #333;
+            border-radius: 8px; padding: 10px; width: 280px;
+        }
+        #yt-canvas { display: block; border-radius: 4px; width: 100%; }
+        #yt-equation { 
+            color: #ff9800; font-size: 13px; text-align: center; 
+            margin-top: 6px; font-family: 'Times New Roman', serif; font-style: italic;
+            min-height: 18px; letter-spacing: 0.5px;
+        }
+        #yt-label { color: #666; font-size: 10px; text-align: center; margin-top: 2px; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="panel">
+        <h3>波动参数控制</h3>
+        <button id="btn-pause">⏸ 暂停动画</button>
+        <div class="control-group">
+            <label>频率 f (Hz) <span class="val" id="v-freq">1.0</span></label>
+            <input type="range" id="s-freq" min="0.2" max="3.0" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+            <label>振幅 A (m) <span class="val" id="v-amp">1.0</span></label>
+            <input type="range" id="s-amp" min="0.2" max="2.0" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+            <label>波速 v (m/s) [介质属性] <span class="val" id="v-speed">2.0</span></label>
+            <input type="range" id="s-speed" min="0.5" max="5.0" step="0.1" value="2.0">
+        </div>
+        <div class="control-group">
+            <label>观测质点位置 x₀ (m) <span class="val" id="v-probe">2.0</span></label>
+            <input type="range" id="s-probe" min="0" max="8" step="0.1" value="2.0">
+        </div>
+        <div class="hint">
+            💡 波长 λ = v/f = <span id="v-lambda" style="color:#4fc3f7">2.00</span> m<br>
+            按 [空格键] 快捷暂停/继续。<br>
+            红色虚线箭头表示质点瞬时位移。
+        </div>
+    </div>
+
+    <div id="yt-panel">
+        <canvas id="yt-canvas" width="560" height="300"></canvas>
+        <div id="yt-equation">y = 1.00 cos(6.28t - 6.28)</div>
+        <div id="yt-label">观测点 x₀ 的 y-t 振动图</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ==================== 全局状态 ====================
+        const state = {
+            freq: 1.0, amp: 1.0, speed: 2.0, probeX: 2.0, time: 0, paused: false,
+            get omega() { return 2 * Math.PI * this.freq; },
+            get k() { return this.omega / this.speed; },
+            get lambda() { return this.speed / this.freq; }
+        };
+
+        const YT_HISTORY_LEN = 300;
+        const ytHistory = new Float32Array(YT_HISTORY_LEN).fill(0);
+        let ytFrameCount = 0;
+
+        // ==================== 场景初始化 ====================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111111);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(4, 3, 8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(4, 0, 0);
+
+        // ==================== 通用 Sprite 创建器 ====================
+        function createTextSprite(text, position, opts = {}) {
+            const { fontSize = 48, color = '#ffffff', scale = 2.0, align = 'center' } = opts;
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.font = `italic ${fontSize}px "Times New Roman", serif`;
+            ctx.fillStyle = color;
+            ctx.textAlign = align;
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, align === 'left' ? 20 : 256, 64);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.minFilter = THREE.LinearFilter;
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.copy(position);
+            sprite.scale.set(scale, scale * 0.25, 1);
+            sprite.userData = { canvas, ctx, tex, fontSize, color, align };
+            return sprite;
+        }
+
+        function updateSpriteText(sprite, text) {
+            const { canvas, ctx, tex, fontSize, color, align } = sprite.userData;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = `italic ${fontSize}px "Times New Roman", serif`;
+            ctx.fillStyle = color;
+            ctx.textAlign = align;
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, align === 'left' ? 20 : 256, 64);
+            tex.needsUpdate = true;
+        }
+
+        // ==================== 坐标轴 ====================
+        const AXIS_LENGTH = 9;
+        const ARROW_H = 0.5, ARROW_R = 0.12;
+
+        const xAxisGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0), new THREE.Vector3(AXIS_LENGTH - ARROW_H, 0, 0)
+        ]);
+        scene.add(new THREE.Line(xAxisGeo, new THREE.LineBasicMaterial({ color: 0xffffff })));
+        const xArrow = new THREE.Mesh(new THREE.ConeGeometry(ARROW_R, ARROW_H, 16), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        xArrow.rotation.z = -Math.PI / 2;
+        xArrow.position.set(AXIS_LENGTH - ARROW_H / 2, 0, 0);
+        scene.add(xArrow);
+        scene.add(createTextSprite('x (m)', new THREE.Vector3(AXIS_LENGTH + 0.8, 0, 0), { fontSize: 40 }));
+
+        const Y_AXIS_LEN = 3;
+        const yAxisGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, -Y_AXIS_LEN, 0), new THREE.Vector3(0, Y_AXIS_LEN - ARROW_H, 0)
+        ]);
+        const yAxisMat = new THREE.LineDashedMaterial({ color: 0xaaaaaa, dashSize: 0.3, gapSize: 0.2 });
+        const yAxisLine = new THREE.Line(yAxisGeo, yAxisMat);
+        yAxisLine.computeLineDistances();
+        scene.add(yAxisLine);
+        const yArrow = new THREE.Mesh(new THREE.ConeGeometry(ARROW_R, ARROW_H, 16), new THREE.MeshBasicMaterial({ color: 0xaaaaaa }));
+        yArrow.position.set(0, Y_AXIS_LEN - ARROW_H / 2, 0);
+        scene.add(yArrow);
+        scene.add(createTextSprite('y (m)', new THREE.Vector3(0, Y_AXIS_LEN + 0.6, 0), { fontSize: 40, color: '#aaaaaa' }));
+
+        // ==================== 波形曲线 (相位色环) ====================
+        const WAVE_POINTS = 400;
+        const WAVE_X_MAX = 8;
+        const wavePositions = new Float32Array(WAVE_POINTS * 3);
+        const waveColors = new Float32Array(WAVE_POINTS * 3);
+        const waveGeo = new THREE.BufferGeometry();
+        waveGeo.setAttribute('position', new THREE.BufferAttribute(wavePositions, 3));
+        waveGeo.setAttribute('color', new THREE.BufferAttribute(waveColors, 3));
+        scene.add(new THREE.Line(waveGeo, new THREE.LineBasicMaterial({ vertexColors: true })));
+
+        // ==================== 普通质点球体 ====================
+        const NUM_PARTICLES = 17;
+        const particles = [];
+        const sphereGeo = new THREE.SphereGeometry(0.08, 16, 16);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7 });
+        for (let i = 0; i < NUM_PARTICLES; i++) {
+            const xPos = (i / (NUM_PARTICLES - 1)) * WAVE_X_MAX;
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+            scene.add(sphere);
+            particles.push({ mesh: sphere, x: xPos });
+        }
+
+        // ==================== 观测质点 + 位移指示箭头 ====================
+        const probeMarker = new THREE.Mesh(
+            new THREE.RingGeometry(0.12, 0.18, 32),
+            new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide })
+        );
+        probeMarker.rotation.x = Math.PI / 2;
+        scene.add(probeMarker);
+
+        // 位移指示线组：虚线杆 + 箭头锥体
+        const dispGroup = new THREE.Group();
+
+        // 虚线杆：从 (0,0,0) 到 (0,1,0)，后续通过 scale.y 控制长度和方向
+        const dispLineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0)
+        ]);
+        const dispLineMat = new THREE.LineDashedMaterial({
+            color: 0xff4444, dashSize: 0.15, gapSize: 0.1, linewidth: 1
+        });
+        const dispLine = new THREE.Line(dispLineGeo, dispLineMat);
+        dispLine.computeLineDistances();
+        dispGroup.add(dispLine);
+
+        // 箭头锥体：默认尖端朝 +Y，放在杆顶端 (0,1,0)
+        const DISP_ARROW_H = 0.25;
+        const dispArrow = new THREE.Mesh(
+            new THREE.ConeGeometry(0.08, DISP_ARROW_H, 12),
+            new THREE.MeshBasicMaterial({ color: 0xff4444 })
+        );
+        dispArrow.position.y = 1.0 + DISP_ARROW_H / 2; // 锥体中心对齐杆顶
+        dispGroup.add(dispArrow);
+
+        scene.add(dispGroup);
+
+        // ==================== 动态方程 Sprites ====================
+        const waveEqSprite = createTextSprite(
+            'y = A cos(ωt - kx)',
+            new THREE.Vector3(WAVE_X_MAX / 2, -2.2, 0),
+            { fontSize: 42, color: '#4fc3f7', scale: 3.0 }
+        );
+        scene.add(waveEqSprite);
+
+        // ==================== UI 绑定 ====================
+        function bindSlider(id, key, displayId) {
+            const el = document.getElementById(id);
+            const disp = document.getElementById(displayId);
+            el.addEventListener('input', () => {
+                state[key] = parseFloat(el.value);
+                disp.textContent = state[key].toFixed(1);
+                updateLambdaDisplay();
+            });
+        }
+        bindSlider('s-freq', 'freq', 'v-freq');
+        bindSlider('s-amp', 'amp', 'v-amp');
+        bindSlider('s-speed', 'speed', 'v-speed');
+        bindSlider('s-probe', 'probeX', 'v-probe');
+
+        function updateLambdaDisplay() {
+            document.getElementById('v-lambda').textContent = state.lambda.toFixed(2);
+        }
+        updateLambdaDisplay();
+
+        const btnPause = document.getElementById('btn-pause');
+        function togglePause() {
+            state.paused = !state.paused;
+            btnPause.textContent = state.paused ? '▶ 继续播放' : '⏸ 暂停动画';
+            btnPause.classList.toggle('paused', state.paused);
+        }
+        btnPause.addEventListener('click', togglePause);
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+        });
+
+        // ==================== y-t 示波器 ====================
+        const ytCanvas = document.getElementById('yt-canvas');
+        const ytCtx = ytCanvas.getContext('2d');
+        const ytEqEl = document.getElementById('yt-equation');
+
+        function drawYTGraph() {
+            const w = ytCanvas.width, h = ytCanvas.height;
+            ytCtx.fillStyle = '#0a0a0a';
+            ytCtx.fillRect(0, 0, w, h);
+            ytCtx.strokeStyle = '#222'; ytCtx.lineWidth = 1;
+            ytCtx.beginPath(); ytCtx.moveTo(0, h/2); ytCtx.lineTo(w, h/2); ytCtx.stroke();
+            ytCtx.strokeStyle = '#4fc3f7'; ytCtx.lineWidth = 3;
+            ytCtx.beginPath();
+            const maxAmp = 2.2;
+            for (let i = 0; i < YT_HISTORY_LEN; i++) {
+                const px = (i / YT_HISTORY_LEN) * w;
+                const py = h/2 - (ytHistory[i] / maxAmp) * (h/2 - 20);
+                i === 0 ? ytCtx.moveTo(px, py) : ytCtx.lineTo(px, py);
+            }
+            ytCtx.stroke();
+            const cur = ytHistory[YT_HISTORY_LEN - 1];
+            ytCtx.fillStyle = '#ff4444';
+            ytCtx.beginPath();
+            ytCtx.arc(w - 3, h/2 - (cur / maxAmp) * (h/2 - 20), 6, 0, Math.PI * 2);
+            ytCtx.fill();
+        }
+
+        function updateVibrationEquation() {
+            const { amp, omega, k, probeX } = state;
+            const phase0 = k * probeX;
+            const sign = phase0 >= 0 ? '-' : '+';
+            const absPhase = Math.abs(phase0).toFixed(2);
+            ytEqEl.textContent = `y = ${amp.toFixed(2)} cos(${omega.toFixed(2)}t ${sign} ${absPhase})`;
+        }
+
+        function updateWaveEquation() {
+            const { amp, omega, k } = state;
+            updateSpriteText(waveEqSprite, `y = ${amp.toFixed(2)} cos(${omega.toFixed(2)}t - ${k.toFixed(2)}x)`);
+        }
+
+        // ==================== HSL → RGB ====================
+        function hslToRgb(h, s, l) {
+            h = ((h % 1) + 1) % 1;
+            const c = (1 - Math.abs(2 * l - 1)) * s;
+            const x = c * (1 - Math.abs((h * 6) % 2 - 1));
+            const m = l - c / 2;
+            let r, g, b;
+            if (h < 1/6)      { r=c; g=x; b=0; }
+            else if (h < 2/6) { r=x; g=c; b=0; }
+            else if (h < 3/6) { r=0; g=c; b=x; }
+            else if (h < 4/6) { r=0; g=x; b=c; }
+            else if (h < 5/6) { r=x; g=0; b=c; }
+            else              { r=c; g=0; b=x; }
+            return [r+m, g+m, b+m];
+        }
+
+        // ==================== 动画主循环 ====================
+        const clock = new THREE.Clock();
+        let eqUpdateCounter = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            if (!state.paused) state.time += dt;
+
+            const { omega, k, amp, time, probeX } = state;
+
+            // 1. 波形 + 相位色环
+            const posAttr = waveGeo.attributes.position;
+            const colAttr = waveGeo.attributes.color;
+            for (let i = 0; i < WAVE_POINTS; i++) {
+                const x = (i / (WAVE_POINTS - 1)) * WAVE_X_MAX;
+                const phase = omega * time - k * x;
+                const y = amp * Math.cos(phase); // ✅ 统一使用 cos
+                posAttr.setXYZ(i, x, y, 0);
+                const hue = ((phase % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) / (2*Math.PI);
+                const [r, g, b] = hslToRgb(hue, 0.9, 0.55);
+                colAttr.setXYZ(i, r, g, b);
+            }
+            posAttr.needsUpdate = true;
+            colAttr.needsUpdate = true;
+
+            // 2. 普通质点
+            for (const p of particles) {
+                p.mesh.position.set(p.x, amp * Math.cos(omega * time - k * p.x), 0);
+            }
+
+            // 3. ✅ 观测质点 + 位移指示箭头
+            const probePhase = omega * time - k * probeX;
+            const probeY = amp * Math.cos(probePhase);
+
+            // 更新质点标记
+            probeMarker.position.set(probeX, probeY, 0);
+
+            // 更新位移指示箭头
+            dispGroup.position.set(probeX, 0, 0); // 固定端始终在 X 轴上
+
+            // ✅ 核心逻辑：scale.y = probeY
+            //   probeY > 0 → scale.y > 0 → 箭头朝 +Y，长度 = |probeY|
+            //   probeY < 0 → scale.y < 0 → 箭头自动翻转朝 -Y，长度 = |probeY|
+            //   probeY = 0 → scale.y = 0 → 箭头消失（位移为零）
+            dispGroup.scale.set(1, probeY, 1);
+
+            // ⚠️ 关键：scale 改变后必须重新计算虚线距离，否则虚线间距会随长度拉伸
+            dispLine.computeLineDistances();
+
+            // 4. y-t 数据 & 方程更新
+            if (!state.paused) {
+                ytFrameCount++;
+                if (ytFrameCount % 2 === 0) {
+                    ytHistory.copyWithin(0, 1);
+                    ytHistory[YT_HISTORY_LEN - 1] = probeY;
+                    drawYTGraph();
+                }
+                eqUpdateCounter++;
+                if (eqUpdateCounter % 10 === 0) {
+                    updateVibrationEquation();
+                    updateWaveEquation();
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // 初始渲染
+        updateVibrationEquation();
+        updateWaveEquation();
+        drawYTGraph();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

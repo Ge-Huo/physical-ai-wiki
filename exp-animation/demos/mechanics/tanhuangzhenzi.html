@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D演示：弹簧振子运动方程与旋转矢量</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+        
+        /* 控制面板 */
+        #panel {
+            position: absolute; top: 20px; left: 20px; width: 280px;
+            background: rgba(15, 23, 42, 0.85); padding: 20px; border-radius: 12px;
+            backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        h2 { margin: 0 0 15px; font-size: 16px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+        .ctrl { margin-bottom: 14px; }
+        .ctrl label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+        .ctrl span { color: #38bdf8; font-weight: 600; font-family: monospace; }
+        input[type=range] { width: 100%; accent-color: #38bdf8; cursor: pointer; }
+        
+        .btns { display: flex; gap: 8px; margin-top: 18px; }
+        button {
+            flex: 1; padding: 8px; border: none; border-radius: 6px;
+            background: #1e293b; color: #cbd5e1; font-size: 13px; cursor: pointer; transition: 0.2s;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        button:hover { background: #334155; }
+        button.active { background: #ef4444; color: white; border-color: #ef4444; }
+
+        /* 实时方程显示 */
+        #equation {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); padding: 12px 30px; border-radius: 30px;
+            font-size: 22px; font-family: 'Times New Roman', serif; letter-spacing: 2px;
+            pointer-events: none; white-space: nowrap;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+        .eq-var { color: #38bdf8; font-weight: bold; }
+        .eq-val { color: #fbbf24; font-family: monospace; font-size: 18px; }
+    </style>
+    <script type="importmap">
+        { "imports": { 
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" 
+        }}
+    </script>
+</head>
+<body>
+    
+    <!-- 返回按钮：固定在右下角 -->
+<div style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
+    <a href="/#/exp-animation/interactive-animation">
+        <button 
+            style="
+                background-color: rgba(255, 255, 255, 0.9); 
+                color: #333; 
+                border: 1px solid #ccc; 
+                padding: 8px 16px; 
+                border-radius: 4px; 
+                cursor: pointer;
+                font-weight: bold;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            📚 返回实验说明
+        </button>
+    </a>
+</div>
+
+
+    <!-- 这里是你原本的 Canvas 或动画代码 -->
+    <canvas id="myCanvas"></canvas>
+    ...
+
+<div id="panel">
+    <h2>运动方程参数</h2>
+    <div class="ctrl">
+        <label>振幅 A <span id="v-A">2.0 m</span></label>
+        <input type="range" id="s-A" min="0.5" max="3.5" step="0.1" value="2.0">
+    </div>
+    <div class="ctrl">
+        <label>角频率 ω <span id="v-w">2.0 rad/s</span></label>
+        <input type="range" id="s-w" min="0.5" max="5.0" step="0.1" value="2.0">
+    </div>
+    <div class="ctrl">
+        <label>初相 φ₀ <span id="v-p">0°</span></label>
+        <input type="range" id="s-p" min="0" max="360" step="1" value="0">
+    </div>
+    <div class="btns">
+        <button id="btn-play">⏸ 暂停</button>
+        <button id="btn-reset">↺ 重置</button>
+    </div>
+</div>
+
+<div id="equation">
+    x = <span class="eq-var">A</span>·cos(<span class="eq-var">ω</span>t + <span class="eq-var">φ₀</span>) = 
+    <span class="eq-val" id="eq-x">0.00</span> m
+</div>
+
+<div id="canvas-container"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ==================== 场景初始化 ====================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f172a);
+scene.fog = new THREE.Fog(0x0f172a, 10, 25);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(2, 3, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 0, 0);
+
+// 灯光系统
+const ambLight = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(5, 8, 5);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+scene.add(dirLight);
+
+// 地面网格
+const grid = new THREE.GridHelper(20, 20, 0x1e293b, 0x1e293b);
+grid.position.y = -1.5;
+scene.add(grid);
+// ==================== 坐标系与原点构建 ====================
+
+// 1. 自定义 XY 坐标轴（避免 Z 轴干扰弹簧振子平面）
+const AXIS_LEN = 6;
+const axisGroup = new THREE.Group();
+
+// X 轴 (红色)
+const xAxisGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-AXIS_LEN, 0, 0), 
+    new THREE.Vector3(AXIS_LEN, 0, 0)
+]);
+const xAxis = new THREE.Line(xAxisGeo, new THREE.LineBasicMaterial({ color: 0xef4444 }));
+const xArrow = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(AXIS_LEN-0.3,0,0), 0.3, 0xef4444, 0.2, 0.15);
+
+// Y 轴 (绿色)
+const yAxisGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, -AXIS_LEN, 0), 
+    new THREE.Vector3(0, AXIS_LEN, 0)
+]);
+const yAxis = new THREE.Line(yAxisGeo, new THREE.LineBasicMaterial({ color: 0x22c55e }));
+const yArrow = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,AXIS_LEN-0.3,0), 0.3, 0x22c55e, 0.2, 0.15);
+
+axisGroup.add(xAxis, xArrow, yAxis, yArrow);
+scene.add(axisGroup);
+
+// 2. 坐标原点高亮标记
+const originGeo = new THREE.SphereGeometry(0.08, 16, 16);
+const originMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const originDot = new THREE.Mesh(originGeo, originMat);
+scene.add(originDot);
+
+// 3. 可选：添加文字标签 (使用 Sprite 保证始终面向相机)
+function createLabel(text, position, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = color;
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 32, 32);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.position.copy(position);
+    sprite.scale.set(0.5, 0.5, 1);
+    return sprite;
+}
+
+const labelX = createLabel('x', new THREE.Vector3(AXIS_LEN + 0.3, 0, 0), '#ef4444');
+const labelY = createLabel('y', new THREE.Vector3(0, AXIS_LEN + 0.3, 0), '#22c55e');
+const labelO = createLabel('O', new THREE.Vector3(-0.3, -0.3, 0), '#ffffff');
+scene.add(labelX, labelY, labelO);
+// ==================== 核心组件构建 ====================
+
+// 1. 墙壁
+const wallGeo = new THREE.BoxGeometry(0.3, 4, 4);
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.9 });
+const wall = new THREE.Mesh(wallGeo, wallMat);
+wall.position.set(-5.15, 0, 0);
+wall.receiveShadow = true;
+scene.add(wall);
+
+// 2. 真实感弹簧生成器
+function buildSpringGeo(len, restLen = 4, radius = 0.18, coils = 14, wire = 0.028) {
+    const pts = [];
+    const segs = coils * 30;
+    const cap = 0.06; // 端部直线段比例
+    for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        let x, y, z;
+        if (t < cap) {
+            x = (t / cap) * cap * len; y = 0; z = 0;
+        } else if (t > 1 - cap) {
+            const lt = (t - (1 - cap)) / cap;
+            x = ((1 - cap) + lt * cap) * len; y = 0; z = 0;
+        } else {
+            const ht = (t - cap) / (1 - 2 * cap);
+            const a = ht * coils * Math.PI * 2;
+            x = (cap + ht * (1 - 2 * cap)) * len;
+            y = Math.cos(a) * radius;
+            z = Math.sin(a) * radius;
+        }
+        pts.push(new THREE.Vector3(x, y, z));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    return new THREE.TubeGeometry(curve, segs, wire, 8, false);
+}
+
+const springMat = new THREE.MeshStandardMaterial({ 
+    color: 0x94a3b8, metalness: 0.85, roughness: 0.25 
+});
+let springMesh = new THREE.Mesh(buildSpringGeo(4), springMat);
+springMesh.position.set(-5, 0, 0);
+springMesh.castShadow = true;
+scene.add(springMesh);
+
+// 3. 振子小球
+const ballGeo = new THREE.SphereGeometry(0.35, 32, 32);
+const ballMat = new THREE.MeshStandardMaterial({ 
+    color: 0xfbbf24, metalness: 0.4, roughness: 0.3, emissive: 0x332200 
+});
+const ball = new THREE.Mesh(ballGeo, ballMat);
+ball.castShadow = true;
+scene.add(ball);
+
+// 4. 旋转矢量系统
+const vecGroup = new THREE.Group();
+scene.add(vecGroup);
+
+// 参考圆
+const ringGeo = new THREE.RingGeometry(1.98, 2.02, 128);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.2 });
+const refRing = new THREE.Mesh(ringGeo, ringMat);
+vecGroup.add(refRing);
+
+// 矢量箭头
+const arrowBody = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.035, 1, 12).translate(0, 0.5, 0),
+    new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0x440000 })
+);
+const arrowTip = new THREE.Mesh(
+    new THREE.ConeGeometry(0.1, 0.25, 12).translate(0, 0.125, 0),
+    arrowBody.material
+);
+arrowTip.position.y = 1;
+arrowBody.add(arrowTip);
+vecGroup.add(arrowBody);
+
+// 投影虚线
+const dashMat = new THREE.LineDashedMaterial({ color: 0xfbbf24, dashSize: 0.12, gapSize: 0.08 });
+const dashGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const projLine = new THREE.Line(dashGeo, dashMat);
+scene.add(projLine);
+
+// 5. x-t 波形轨迹
+// const WAVE_PTS = 500;
+// const wavePosArr = new Float32Array(WAVE_PTS * 3);
+// const waveGeo = new THREE.BufferGeometry();
+// waveGeo.setAttribute('position', new THREE.BufferAttribute(wavePosArr, 3));
+// const waveLine = new THREE.Line(waveGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.7 }));
+// waveLine.position.set(3.5, -3, 0); // 偏移放置
+// scene.add(waveLine);
+
+// 时间轴标签
+const timeAxis = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(3.5, -1.2, 0), 6, 0x475569, 0.2, 0.15);
+scene.add(timeAxis);
+
+// ==================== 状态与交互 ====================
+const S = { A: 2, w: 2, p: 0, t: 0, playing: true, lastLen: 4 };
+const WALL_X = -5;
+
+const ui = {
+    sA: document.getElementById('s-A'), vA: document.getElementById('v-A'),
+    sW: document.getElementById('s-w'), vW: document.getElementById('v-w'),
+    sP: document.getElementById('s-p'), vP: document.getElementById('v-p'),
+    eqX: document.getElementById('eq-x'),
+    btnPlay: document.getElementById('btn-play'),
+    btnReset: document.getElementById('btn-reset')
+};
+
+ui.sA.oninput = e => { S.A = +e.target.value; ui.vA.textContent = S.A.toFixed(1)+' m'; refRing.scale.setScalar(S.A); };
+ui.sW.oninput = e => { S.w = +e.target.value; ui.vW.textContent = S.w.toFixed(1)+' rad/s'; };
+ui.sP.oninput = e => { S.p = +e.target.value * Math.PI/180; ui.vP.textContent = e.target.value+'°'; };
+ui.btnPlay.onclick = () => { S.playing = !S.playing; ui.btnPlay.textContent = S.playing ? '⏸ 暂停' : '▶ 播放'; ui.btnPlay.classList.toggle('active', !S.playing); };
+ui.btnReset.onclick = () => { S.t = 0; wavePosArr.fill(0); waveGeo.attributes.position.needsUpdate = true; };
+
+// ==================== 动画循环 ====================
+const clock = new THREE.Clock();
+let waveTimer = 0;
+
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = clock.getDelta();
+    if (S.playing) S.t += dt;
+
+    // 1. 运动方程核心计算
+    const phase = S.w * S.t + S.p;
+    const x = S.A * Math.cos(phase);
+    
+    // 2. 更新振子
+    ball.position.set(x, 0, 0);
+    
+    // 3. 更新弹簧（带阈值优化）
+    const curLen = Math.max(0.4, x - WALL_X);
+    if (Math.abs(curLen - S.lastLen) > 0.008) {
+        springMesh.geometry.dispose();
+        springMesh.geometry = buildSpringGeo(curLen);
+        S.lastLen = curLen;
+    }
+    
+    // 4. 更新旋转矢量
+    arrowBody.scale.set(1, S.A, 1);
+    arrowBody.rotation.z = phase - Math.PI / 2;
+    
+    // 5. 更新投影虚线
+    const dp = projLine.geometry.attributes.position.array;
+    dp[0] = x; dp[1] = 0; dp[2] = 0;
+    dp[3] = x; dp[4] = S.A * Math.sin(phase); dp[5] = 0;
+    projLine.geometry.attributes.position.needsUpdate = true;
+    projLine.computeLineDistances();
+    
+    // 6. 更新波形图
+    if (S.playing) {
+        waveTimer += dt;
+        if (waveTimer > 0.03) {
+            waveTimer = 0;
+            // 整体左移
+            for (let i = 0; i < WAVE_PTS; i++) wavePosArr[i*3] -= 0.025;
+            // 写入最新点（使用环形索引避免排序）
+            // 简化：直接找最左侧点覆盖
+            let minX = Infinity, minIdx = 0;
+            for (let i = 0; i < WAVE_PTS; i++) {
+                if (wavePosArr[i*3] < minX) { minX = wavePosArr[i*3]; minIdx = i; }
+            }
+            wavePosArr[minIdx*3] = 0;
+            wavePosArr[minIdx*3+1] = x;
+            wavePosArr[minIdx*3+2] = 0;
+            waveGeo.attributes.position.needsUpdate = true;
+        }
+    }
+    
+    // 7. 更新方程数值显示
+    ui.eqX.textContent = x.toFixed(2);
+    
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+window.onresize = () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+};
+
+animate();
+</script>
+</body>
+</html>

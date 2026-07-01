@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>旋转矢量法与弹簧振子 (真实弹簧版)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a2e; color: white; font-family: sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #controls {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; z-index: 10;
+        }
+        label { display: block; margin: 5px 0; font-size: 14px; }
+        input[type=range] { width: 150px; vertical-align: middle; }
+        button { margin-top:10px; padding:5px 15px; cursor:pointer; border:none; border-radius:4px; background:#4fc3f7; color:#000;}
+    </style>
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+</head>
+<body>
+    <div id="controls">
+    <!-- 角频率单位: rad/s -->
+    <label>角频率 ω: 
+        <input type="range" id="omega" min="0.5" max="5" step="0.1" value="2"> 
+        <span id="omega-val">2.0</span> rad/s
+    </label>
+    
+    <!-- 振幅单位: m (假设场景1单位=1米) -->
+    <label>振幅 A: 
+        <input type="range" id="amplitude" min="1" max="4" step="0.1" value="2.5"> 
+        <span id="amp-val">2.5</span> m
+    </label>
+    
+    <!-- 初相位单位: rad -->
+    <label>初相位 φ₀: 
+        <input type="range" id="phase" min="0" max="6.28" step="0.01" value="0"> 
+        <span id="phase-val">0.0</span> rad
+    </label>
+    
+    <button id="toggle-btn">暂停</button>
+</div>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // === 1. 场景初始化 ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 16); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
+
+        // === 2. 创建物体 ===
+        const state = { omega: 2, amplitude: 2.5, phase: 0, running: true, time: 0 };
+        
+        const ballMat = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x112233 });
+        const phasorMat = new THREE.MeshStandardMaterial({ color: 0xff7043 });
+        const lineMat = new THREE.LineDashedMaterial({ color: 0xffff00, dashSize: 0.2, gapSize: 0.15 });
+        const axisMat = new THREE.LineBasicMaterial({ color: 0x444444 });
+
+        // --- X 轴基准线 (带箭头、标签与刻度) ---
+        const AXIS_LENGTH = 7;
+        const TICK_SIZE = 0.15;
+
+        // 1. X 轴主线 (加粗并使用纯白色以突出显示)
+        const xAxisGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-6, 0, 0), 
+        new THREE.Vector3(AXIS_LENGTH, 0, 0)
+       ]);
+const xAxis = new THREE.Line(xAxisGeo, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 }));
+scene.add(xAxis);
+
+// 2. X 轴正方向箭头
+const xArrow = new THREE.ArrowHelper(
+    new THREE.Vector3(1, 0, 0),       // 方向
+    new THREE.Vector3(AXIS_LENGTH, 0, 0), // 起点
+    0.8,                              // 长度
+    0xffffff,                         // 颜色
+    0.4,                              // 箭头锥体长度
+    0.25                              // 箭头锥体半径
+);
+scene.add(xArrow);
+
+// 3. "X" 文字标签 (使用 Sprite 保证始终面向相机)
+function createTextSprite(text, position) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; 
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.font = 'Bold 80px Arial';
+    ctx.fillStyle = 'rgba(255,255,255,1)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 64, 64);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.scale.set(1.2, 1.2, 1); // 调整标签大小
+    return sprite;
+}
+scene.add(createTextSprite('X', new THREE.Vector3(AXIS_LENGTH + 1.2, 0, 0)));
+
+// 4. 整数刻度线 (-4 到 4)
+for (let i = -4; i <= 4; i++) {
+    if (i === 0) continue; // 原点已有Y轴交叉，可跳过或特殊处理
+    const tickGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(i, -TICK_SIZE, 0),
+        new THREE.Vector3(i, TICK_SIZE, 0)
+    ]);
+    const tick = new THREE.Line(tickGeo, new THREE.LineBasicMaterial({ color: 0xaaaaaa }));
+    scene.add(tick);
+}
+
+// 5. 原点 "O" 标签 (可选，帮助定位平衡位置)
+scene.add(createTextSprite('O', new THREE.Vector3(-0.4, -0.6, 0)));
+// --- Y 轴辅助参考线 (虚线 + 箭头) ---
+const Y_AXIS_LENGTH = 5;
+const ARROW_HEIGHT = 0.6;   // 箭头锥体高度
+const ARROW_RADIUS = 0.15;  // 箭头锥体底面半径
+
+// 1. 虚线轴身（注意：终点需回退 ARROW_HEIGHT，避免与箭头重叠）
+const yAxisGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, -Y_AXIS_LENGTH, 0),
+    new THREE.Vector3(0, Y_AXIS_LENGTH - ARROW_HEIGHT, 0)
+]);
+const yAxisMat = new THREE.LineDashedMaterial({
+    color: 0xaaaaaa,
+    dashSize: 0.3,
+    gapSize: 0.2,
+    linewidth: 1
+});
+const yAxisLine = new THREE.Line(yAxisGeo, yAxisMat);
+yAxisLine.computeLineDistances(); // ⚠️ 关键：不调用则虚线显示为实线
+scene.add(yAxisLine);
+
+// 2. 箭头锥体（独立 Mesh，定位到轴顶端）
+const arrowGeo = new THREE.ConeGeometry(ARROW_RADIUS, ARROW_HEIGHT, 16);
+const arrowMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
+const yArrow = new THREE.Mesh(arrowGeo, arrowMat);
+// ConeGeometry 默认朝上(+Y)，无需旋转；位置设为轴顶端中心
+yArrow.position.set(0, Y_AXIS_LENGTH - ARROW_HEIGHT / 2, 0);
+scene.add(yArrow);
+
+// 3. Y 轴标签
+scene.add(createTextSprite('Y', new THREE.Vector3(0, Y_AXIS_LENGTH + 0.8, 0)));
+
+        // --- 真实弹簧生成 (CatmullRomCurve3 + TubeGeometry) ---
+        const wallX = -5.5;
+        const COILS = 14;       // 弹簧圈数
+        const SPRING_RADIUS = 0.18; // 弹簧螺旋半径
+        const TUBE_RADIUS = 0.010;   // 弹簧线材粗细
+        
+        // 生成单位长度(1m)的螺旋线路径
+        const points = [];
+        for (let i = 0; i <= COILS * 20; i++) {
+            const t = i / (COILS * 20);
+            points.push(new THREE.Vector3(
+                t, // X 从 0 到 1
+                Math.sin(t * COILS * Math.PI * 2) * SPRING_RADIUS,
+                Math.cos(t * COILS * Math.PI * 2) * SPRING_RADIUS
+            ));
+        }
+        const curve = new THREE.CatmullRomCurve3(points);
+        const springGeo = new THREE.TubeGeometry(curve, COILS * 20, TUBE_RADIUS, 8, false);
+        const springMesh = new THREE.Mesh(springGeo, new THREE.MeshStandardMaterial({ 
+            color: 0xbbbbbb, metalness: 0.6, roughness: 0.3 
+        }));
+        // 将弹簧原点移到墙壁位置，方便后续 scale 拉伸
+        springMesh.position.set(wallX, 0, 0);
+        scene.add(springMesh);
+
+        // --- 振子小球 ---
+        const springBall = new THREE.Mesh(new THREE.SphereGeometry(0.35, 32, 32), ballMat);
+        scene.add(springBall);
+
+        // --- 左侧固定墙壁 ---
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3, 2), new THREE.MeshStandardMaterial({ color: 0x666666 }));
+        wall.position.set(wallX - 0.15, 0, 0);
+        scene.add(wall);
+
+        // --- 旋转矢量 (XY 平面) ---
+        const circleGeo = new THREE.RingGeometry(2.45, 2.5, 64);
+        const circleMesh = new THREE.Mesh(circleGeo, new THREE.MeshBasicMaterial({ color: 0x555555, side: THREE.DoubleSide }));
+        scene.add(circleMesh);
+
+        const phasorBall = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 32), phasorMat);
+        scene.add(phasorBall);
+
+        const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 2.5, 0xff7043, 0.3, 0.2);
+        scene.add(arrowHelper);
+
+        const dashLine = new THREE.Line(new THREE.BufferGeometry(), lineMat);
+        scene.add(dashLine);
+
+        // === 3. 动画循环 ===
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            if (state.running) state.time += delta;
+
+            const { omega, amplitude, phase, time } = state;
+            const theta = omega * time + phase;
+            
+            const x = amplitude * Math.cos(theta);
+            const y = amplitude * Math.sin(theta);
+
+            // 更新振子位置
+            springBall.position.set(x, 0, 0);
+
+            // ⭐ 核心：通过 scale.x 拉伸弹簧，避免每帧重建几何体
+            // 弹簧当前长度 = 振子位置 - 墙壁位置
+            const currentLength = x - wallX;
+            // 防止振子穿过墙壁时弹簧反转
+            springMesh.scale.x = Math.max(currentLength, 0.1); 
+
+            // 更新旋转矢量质点
+            phasorBall.position.set(x, y, 0);
+            
+            // 更新箭头
+            const dir = new THREE.Vector3(x, y, 0).normalize();
+            arrowHelper.setDirection(dir);
+            arrowHelper.setLength(amplitude, 0.3, 0.2);
+
+            // 更新投影虚线
+            dashLine.geometry.setFromPoints([
+                new THREE.Vector3(x, y, 0),
+                new THREE.Vector3(x, 0, 0)
+            ]);
+            dashLine.computeLineDistances();
+
+            // 动态缩放参考圆
+            circleMesh.scale.setScalar(amplitude / 2.5);
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // === 4. UI 绑定 ===
+        const bind = (id, key, displayId) => {
+            const el = document.getElementById(id);
+            const disp = document.getElementById(displayId);
+            el.addEventListener('input', () => { 
+                state[key] = parseFloat(el.value); 
+                disp.textContent = state[key].toFixed(1); 
+            });
+        };
+        bind('omega', 'omega', 'omega-val');
+        bind('amplitude', 'amplitude', 'amp-val');
+        bind('phase', 'phase', 'phase-val');
+
+        document.getElementById('toggle-btn').addEventListener('click', function() {
+            state.running = !state.running;
+            this.textContent = state.running ? '暂停' : '继续';
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
