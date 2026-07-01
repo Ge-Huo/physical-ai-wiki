@@ -30,6 +30,6 @@ mindmap
 
   🤝 反馈与交流
 
-*   🐛 **发现 Bug？** [点这里报告](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=bug&title=Bug%3A+)
-*   💡 **有好点子？** [点这里建议](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=enhancement&title=Suggestion%3A+)
+ 🐛 **发现 Bug？** [点这里报告](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=bug&title=Bug%3A+)
+ 💡 **有好点子？** [点这里建议](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=enhancement&title=Suggestion%3A+)
 
