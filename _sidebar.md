@@ -29,4 +29,8 @@
 - **资源与工具**
   - [开源框架 DeepXDE等](resources/frameworks.md)
   - [论文与综述](resources/papers.md)
+<<<<<<< HEAD
   - [教程与课程](resources/tutorials.md)
+=======
+  - [教程与课程](resources/tutorials.md)
+>>>>>>> 1ec3e61b66f855bcb0b4590d87756b4fac5930ff
