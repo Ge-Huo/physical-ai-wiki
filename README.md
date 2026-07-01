@@ -26,6 +26,7 @@ mindmap
       论文与综述
       教程与课程
 ```
+<<<<<<< HEAD
 
 
   🤝 反馈与交流
@@ -33,3 +34,9 @@ mindmap
 *   🐛 **发现 Bug？** [点这里报告](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=bug&title=Bug%3A+)
 *   💡 **有好点子？** [点这里建议](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=enhancement&title=Suggestion%3A+)
 
+=======
+## 🤝 反馈与交流
+
+*   🐛 **发现 Bug？** [点这里报告](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=bug&title=Bug%3A+)
+*   💡 **有好点子？** [点这里建议](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=enhancement&title=Suggestion%3A+)
+>>>>>>> 78ecc1a80669f8a96926714cf9c29fb454553220
