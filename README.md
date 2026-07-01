@@ -26,8 +26,7 @@ mindmap
       论文与综述
       教程与课程
 ```
-联系与反馈
+## 🤝 反馈与交流
 
-如果你在使用过程中遇到问题，或者有好的实验想法，欢迎通过以下方式联系我：
-
-📝 提交 Issue/建议：点击这里去 GitHub 提交
+*   🐛 **发现 Bug？** [点这里报告](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=bug&title=Bug%3A+)
+*   💡 **有好点子？** [点这里建议](https://github.com/Ge-Huo/physical-ai-wiki/issues/new?labels=enhancement&title=Suggestion%3A+)
