@@ -49,29 +49,6 @@
     </script>
 </head>
 <body>
-    
-    <!-- 返回按钮：固定在右下角 -->
-<div style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
-    <a href="../../#/exp-animation/interactive-animation" target="_top">
-        <button 
-            style="
-                background-color: rgba(255, 255, 255, 0.9); 
-                color: #333; 
-                border: 1px solid #ccc; 
-                padding: 8px 16px; 
-                border-radius: 4px; 
-                cursor: pointer;
-                font-weight: bold;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            📚 返回实验说明
-        </button>
-    </a>
-</div>
-
-
-    <!-- 这里是你原本的 Canvas 或动画代码 -->
-    <canvas id="myCanvas"></canvas>
-    ...
 
 <div id="panel">
     <h2>运动方程参数</h2>
@@ -234,9 +211,9 @@ springMesh.castShadow = true;
 scene.add(springMesh);
 
 // 3. 振子小球
-const ballGeo = new THREE.SphereGeometry(0.35, 32, 32);
+const ballGeo = new THREE.SphereGeometry(0.25, 32, 32);
 const ballMat = new THREE.MeshStandardMaterial({ 
-    color: 0xfbbf24, metalness: 0.4, roughness: 0.3, emissive: 0x332200 
+    color: 0xfbbf24, metalness: 0.2, roughness: 0.2, emissive: 0x332200,opacity: 0.45, 
 });
 const ball = new THREE.Mesh(ballGeo, ballMat);
 ball.castShadow = true;
@@ -247,21 +224,21 @@ const vecGroup = new THREE.Group();
 scene.add(vecGroup);
 
 // 参考圆
-const ringGeo = new THREE.RingGeometry(1.98, 2.02, 128);
+const ringGeo = new THREE.RingGeometry(0.98, 1.02, 128);
 const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.2 });
 const refRing = new THREE.Mesh(ringGeo, ringMat);
 vecGroup.add(refRing);
 
 // 矢量箭头
 const arrowBody = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.035, 0.035, 1, 12).translate(0, 0.5, 0),
+    new THREE.CylinderGeometry(0.035, 0.035, 0.8, 12).translate(0, 0.4, 0),
     new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0x440000 })
 );
 const arrowTip = new THREE.Mesh(
-    new THREE.ConeGeometry(0.1, 0.25, 12).translate(0, 0.125, 0),
+    new THREE.ConeGeometry(0.1, 0.2, 12).translate(0, 0.1, 0),
     arrowBody.material
 );
-arrowTip.position.y = 1;
+arrowTip.position.y = 0.8;
 arrowBody.add(arrowTip);
 vecGroup.add(arrowBody);
 
@@ -302,7 +279,7 @@ ui.sW.oninput = e => { S.w = +e.target.value; ui.vW.textContent = S.w.toFixed(1)
 ui.sP.oninput = e => { S.p = +e.target.value * Math.PI/180; ui.vP.textContent = e.target.value+'°'; };
 ui.btnPlay.onclick = () => { S.playing = !S.playing; ui.btnPlay.textContent = S.playing ? '⏸ 暂停' : '▶ 播放'; ui.btnPlay.classList.toggle('active', !S.playing); };
 ui.btnReset.onclick = () => { S.t = 0; wavePosArr.fill(0); waveGeo.attributes.position.needsUpdate = true; };
-
+refRing.scale.setScalar(S.A);
 // ==================== 动画循环 ====================
 const clock = new THREE.Clock();
 let waveTimer = 0;
