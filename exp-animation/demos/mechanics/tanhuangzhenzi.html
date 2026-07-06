@@ -8,20 +8,73 @@
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
         #canvas-container { width: 100vw; height: 100vh; display: block; }
         
-        /* 控制面板 */
+        /* 控制面板（可折叠） */
         #panel {
             position: absolute; top: 20px; left: 20px; width: 280px;
-            background: rgba(15, 23, 42, 0.85); padding: 20px; border-radius: 12px;
+            background: rgba(15, 23, 42, 0.85); padding: 0; border-radius: 12px;
             backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08);
             box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            z-index: 10;
         }
-        h2 { margin: 0 0 15px; font-size: 16px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
-        .ctrl { margin-bottom: 14px; }
+
+        #panel > summary {
+            padding: 12px 20px;
+            cursor: pointer;
+            user-select: none;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #94a3b8;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px 12px 0 0;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        #panel > summary::-webkit-details-marker { display: none; }
+        #panel > summary::marker { content: ""; }
+
+        /* 自定义折叠指示箭头（右侧） */
+        #panel > summary::after {
+            content: "◀";
+            font-size: 12px;
+            transition: transform 0.25s ease;
+        }
+
+        /* 展开时旋转箭头 */
+        #panel[open] > summary::after {
+            transform: rotate(-90deg);
+        }
+
+        #panel > summary:hover {
+            background: rgba(255,255,255,0.06);
+            color: #e2e8f0;
+        }
+
+        /* 折叠内容区的样式与动画 */
+        #panel-content {
+            padding: 12px 16px 12px 16px;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.25s ease;
+        }
+
+        #panel[open] #panel-content {
+            padding: 12px 16px 18px 16px;
+            max-height: 420px; /* 足够容纳全部控件的高度 */
+            opacity: 1;
+        }
+
+        h2 { margin: 0 0 10px; font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+        .ctrl { margin-bottom: 12px; }
         .ctrl label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
         .ctrl span { color: #38bdf8; font-weight: 600; font-family: monospace; }
         input[type=range] { width: 100%; accent-color: #38bdf8; cursor: pointer; }
-        
-        .btns { display: flex; gap: 8px; margin-top: 18px; }
+
+        .btns { display: flex; gap: 8px; margin-top: 14px; }
         button {
             flex: 1; padding: 8px; border: none; border-radius: 6px;
             background: #1e293b; color: #cbd5e1; font-size: 13px; cursor: pointer; transition: 0.2s;
@@ -50,25 +103,30 @@
 </head>
 <body>
 
-<div id="panel">
-    <h2>运动方程参数</h2>
-    <div class="ctrl">
-        <label>振幅 A <span id="v-A">2.0 m</span></label>
-        <input type="range" id="s-A" min="0.5" max="3.5" step="0.1" value="2.0">
+<details id="panel" open>
+    <summary>
+        <span>运动方程参数（点击收起/展开）</span>
+    </summary>
+    <div id="panel-content">
+        <h2>参数控制</h2>
+        <div class="ctrl">
+            <label>振幅 A <span id="v-A">2.0 m</span></label>
+            <input type="range" id="s-A" min="0.5" max="3.5" step="0.1" value="2.0">
+        </div>
+        <div class="ctrl">
+            <label>角频率 ω <span id="v-w">2.0 rad/s</span></label>
+            <input type="range" id="s-w" min="0.5" max="5.0" step="0.1" value="2.0">
+        </div>
+        <div class="ctrl">
+            <label>初相 φ₀ <span id="v-p">0°</span></label>
+            <input type="range" id="s-p" min="0" max="360" step="1" value="0">
+        </div>
+        <div class="btns">
+            <button id="btn-play">⏸ 暂停</button>
+            <button id="btn-reset">↺ 重置</button>
+        </div>
     </div>
-    <div class="ctrl">
-        <label>角频率 ω <span id="v-w">2.0 rad/s</span></label>
-        <input type="range" id="s-w" min="0.5" max="5.0" step="0.1" value="2.0">
-    </div>
-    <div class="ctrl">
-        <label>初相 φ₀ <span id="v-p">0°</span></label>
-        <input type="range" id="s-p" min="0" max="360" step="1" value="0">
-    </div>
-    <div class="btns">
-        <button id="btn-play">⏸ 暂停</button>
-        <button id="btn-reset">↺ 重置</button>
-    </div>
-</div>
+</details>
 
 <div id="equation">
     x = <span class="eq-var">A</span>·cos(<span class="eq-var">ω</span>t + <span class="eq-var">φ₀</span>) = 
@@ -112,6 +170,7 @@ scene.add(dirLight);
 const grid = new THREE.GridHelper(20, 20, 0x1e293b, 0x1e293b);
 grid.position.y = -1.5;
 scene.add(grid);
+
 // ==================== 坐标系与原点构建 ====================
 
 // 1. 自定义 XY 坐标轴（避免 Z 轴干扰弹簧振子平面）
@@ -166,6 +225,7 @@ const labelX = createLabel('x', new THREE.Vector3(AXIS_LEN + 0.3, 0, 0), '#ef444
 const labelY = createLabel('y', new THREE.Vector3(0, AXIS_LEN + 0.3, 0), '#22c55e');
 const labelO = createLabel('O', new THREE.Vector3(-0.3, -0.3, 0), '#ffffff');
 scene.add(labelX, labelY, labelO);
+
 // ==================== 核心组件构建 ====================
 
 // 1. 墙壁
@@ -213,7 +273,7 @@ scene.add(springMesh);
 // 3. 振子小球
 const ballGeo = new THREE.SphereGeometry(0.25, 32, 32);
 const ballMat = new THREE.MeshStandardMaterial({ 
-    color: 0xfbbf24, metalness: 0.2, roughness: 0.2, emissive: 0x332200,opacity: 0.45, 
+    color: 0xfbbf24, metalness: 0.2, roughness: 0.2, emissive: 0x332200, opacity: 0.45, 
 });
 const ball = new THREE.Mesh(ballGeo, ballMat);
 ball.castShadow = true;
@@ -248,14 +308,16 @@ const dashGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), n
 const projLine = new THREE.Line(dashGeo, dashMat);
 scene.add(projLine);
 
-// 5. x-t 波形轨迹
-// const WAVE_PTS = 500;
-// const wavePosArr = new Float32Array(WAVE_PTS * 3);
-// const waveGeo = new THREE.BufferGeometry();
-// waveGeo.setAttribute('position', new THREE.BufferAttribute(wavePosArr, 3));
-// const waveLine = new THREE.Line(waveGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.7 }));
-// waveLine.position.set(3.5, -3, 0); // 偏移放置
-// scene.add(waveLine);
+// 5. x-t 波形轨迹（启用请取消下方注释）
+/*
+const WAVE_PTS = 500;
+const wavePosArr = new Float32Array(WAVE_PTS * 3);
+const waveGeo = new THREE.BufferGeometry();
+waveGeo.setAttribute('position', new THREE.BufferAttribute(wavePosArr, 3));
+const waveLine = new THREE.Line(waveGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.7 }));
+waveLine.position.set(3.5, -3, 0); // 偏移放置
+scene.add(waveLine);
+*/
 
 // 时间轴标签
 const timeAxis = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(3.5, -1.2, 0), 6, 0x475569, 0.2, 0.15);
@@ -278,11 +340,22 @@ ui.sA.oninput = e => { S.A = +e.target.value; ui.vA.textContent = S.A.toFixed(1)
 ui.sW.oninput = e => { S.w = +e.target.value; ui.vW.textContent = S.w.toFixed(1)+' rad/s'; };
 ui.sP.oninput = e => { S.p = +e.target.value * Math.PI/180; ui.vP.textContent = e.target.value+'°'; };
 ui.btnPlay.onclick = () => { S.playing = !S.playing; ui.btnPlay.textContent = S.playing ? '⏸ 暂停' : '▶ 播放'; ui.btnPlay.classList.toggle('active', !S.playing); };
-ui.btnReset.onclick = () => { S.t = 0; wavePosArr.fill(0); waveGeo.attributes.position.needsUpdate = true; };
+ui.btnReset.onclick = () => { 
+    S.t = 0; 
+    // 如果你启用了波形图，取消下方注释以同步重置
+    /*
+    wavePosArr.fill(0);
+    waveGeo.attributes.position.needsUpdate = true;
+    */
+};
 refRing.scale.setScalar(S.A);
+
 // ==================== 动画循环 ====================
 const clock = new THREE.Clock();
 let waveTimer = 0;
+
+// 如果你启用了波形图，请取消下方 WAVE_PTS 等变量的注释
+// const WAVE_PTS = 500; // 已在上方初始化区
 
 function animate() {
     requestAnimationFrame(animate);
@@ -315,7 +388,8 @@ function animate() {
     projLine.geometry.attributes.position.needsUpdate = true;
     projLine.computeLineDistances();
     
-    // 6. 更新波形图
+    // 6. 更新波形图（启用请确保上方 waveGeo/waveLine/wavePosArr 已初始化）
+    /*
     if (S.playing) {
         waveTimer += dt;
         if (waveTimer > 0.03) {
@@ -334,6 +408,7 @@ function animate() {
             waveGeo.attributes.position.needsUpdate = true;
         }
     }
+    */
     
     // 7. 更新方程数值显示
     ui.eqX.textContent = x.toFixed(2);
