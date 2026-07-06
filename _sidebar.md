@@ -14,9 +14,9 @@
   - [动力学仿真展示](exp-animation/dynamics-sim.md)
   - [实验数据驱动建模](exp-animation/data-driven.md)
   - [AI辅助物理实验设计](exp-animation/ai-exp-design.md)
-  - 交互式物理动画演示
-     - [弹簧振子实验](exp-animation/interactive-animation.md)
-     - [机械波实验](exp-animation/mechanical-wave.md)
+  - [交互式物理动画演示](exp-animation/README.md)
+    - [弹簧振子实验](exp-animation/interactive-animation.md)
+    - [机械波实验](exp-animation/mechanical-wave.md)
 
 - **核心技术**
   - [物理信息神经网络 PINNs](core-tech/pinns.md)
