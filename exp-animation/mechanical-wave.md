@@ -10,7 +10,7 @@
 点击下方按钮，将在新标签页中打开全屏交互式仿真环境。
 
 <!-- 下面这一段就是启动按钮的代码 -->
-    <div style="margin-top: 20px; margin-bottom: 20px;">
+<div style="margin-top: 20px; margin-bottom: 20px;">
     <a href="exp-animation/demos/mechanics/mechanical-wave.html" target="_blank">
         <button 
             style="
