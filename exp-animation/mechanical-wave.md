@@ -11,7 +11,7 @@
 
 <!-- 下面这一段就是启动按钮的代码 -->
 <div style="margin-top: 20px; margin-bottom: 20px;">
-    <a href="exp-animation/demos/mechanics/mechanical-wave.html" target="_blank">
+    <a href="demos/mechanics/mechanical-wave.html" target="_blank">
         <button 
             style="
                 background-color: #007bff; 
