@@ -16,7 +16,7 @@
   - [AI辅助物理实验设计](exp-animation/ai-exp-design.md)
   - [交互式物理动画演示](exp-animation/README.md)
     - [弹簧振子实验](exp-animation/interactive-animation.md)
-    - [机械波实验](exp-animation/mechanical-wave.md)
+    - [机械波实验](exp-animation/mechanical_wave.md)
 
 - **核心技术**
   - [物理信息神经网络 PINNs](core-tech/pinns.md)
