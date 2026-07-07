@@ -28,7 +28,7 @@
 </style>
 
 <div style="margin-top: 20px; margin-bottom: 20px;">
-    <a href="demos/mechanics/mechanical-wave.html" target="_blank">
+    <a href="demos/mechanics/mechanical_wave.html" target="_blank">
         <button class="demo-button">
             ⚡ 打开全屏仿真实验
         </button>
