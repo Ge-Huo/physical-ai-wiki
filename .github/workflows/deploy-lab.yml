@@ -55,3 +55,10 @@ jobs:
               --update
           done
           echo "HTML cache headers updated successfully."
+          - name: Debug Secrets (remove after test)
+          run: |
+         echo "AK ID length: ${#OSS_ACCESS_KEY_ID}"
+        echo "AK SECRET length: ${#OSS_ACCESS_KEY_SECRET}"
+       env:
+    OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+    OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
