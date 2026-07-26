@@ -1,0 +1,47 @@
+name: Deploy Lab to Aliyun OSS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'exp-animation/**'            # ← 修改为实际目录
+      - '.github/workflows/deploy-lab.yml'
+  workflow_dispatch:
+
+env:
+  OSS_BUCKET: ge-3d-wiki
+  OSS_ENDPOINT: oss-cn-beijing.aliyuncs.com
+  OSS_TARGET_PREFIX: demo/lab/        # OSS 上的目标路径（保持不变）
+  LAB_DIR: ./exp-animation            # ← 修改为实际本地目录
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ossutil
+        uses: manyuanrong/setup-ossutil@v3.0
+        with:
+          endpoint: ${{ env.OSS_ENDPOINT }}
+          access-key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          access-key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+
+      - name: Sync static files to OSS
+        run: |
+          ossutil sync \
+            "${{ env.LAB_DIR }}/" \
+            "oss://${{ env.OSS_BUCKET }}/${{ env.OSS_TARGET_PREFIX }}" \
+            --update \
+            --delete \
+            --acl public-read \
+            --meta "Cache-Control:max-age=31536000,immutable" \
+            --exclude "*.html"
+
+      - name: Set HTML no-cache
+        run: |
+          ossutil ls "oss://${{ env.OSS_BUCKET }}/${{ env.OSS_TARGET_PREFIX }}" --include "*.html" | \
+          grep -oP '(?<=oss://)[^\s]+\.html' | while read file; do
+            ossutil set-meta "oss://$file" "Cache-Control:no-cache,no-store,must-revalidate" --update
+          done
