@@ -1,0 +1,54 @@
+name: Deploy Lab to Aliyun OSS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'exp-animation/**'
+      - '.github/workflows/deploy-lab.yml'
+  workflow_dispatch:
+
+env:
+  OSS_BUCKET: ge-3d-wiki
+  OSS_ENDPOINT: oss-cn-beijing.aliyuncs.com
+  OSS_TARGET_PREFIX: demo/lab/
+  LAB_DIR: ./exp-animation
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ossutil
+        uses: manyuanrong/setup-ossutil@v3.0
+        with:
+          endpoint: ${{ env.OSS_ENDPOINT }}
+          access-key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          access-key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+
+      # Full sync: upload all files including HTML, set long cache for assets
+      - name: Sync all files to OSS
+        run: |
+          echo "Syncing ${{ env.LAB_DIR }}/ to oss://${{ env.OSS_BUCKET }}/${{ env.OSS_TARGET_PREFIX }}"
+          ossutil sync \
+            "${{ env.LAB_DIR }}/" \
+            "oss://${{ env.OSS_BUCKET }}/${{ env.OSS_TARGET_PREFIX }}" \
+            --update \
+            --delete \
+            --acl public-read \
+            --meta "Cache-Control:max-age=31536000,immutable"
+
+      # Override HTML files with no-cache to ensure latest version is always served
+      - name: Set HTML no-cache
+        run: |
+          echo "Setting no-cache headers for HTML files..."
+          ossutil ls "oss://${{ env.OSS_BUCKET }}/${{ env.OSS_TARGET_PREFIX }}" --include "*.html" -s | \
+          while read file; do
+            if [[ "$file" == *.html ]]; then
+              echo "  -> no-cache: $file"
+              ossutil set-meta "oss://$file" "Cache-Control:no-cache,no-store,must-revalidate" --update
+            fi
+          done
+          echo "HTML cache headers updated successfully."
