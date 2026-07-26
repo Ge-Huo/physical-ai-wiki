@@ -44,11 +44,14 @@ jobs:
       - name: Set HTML no-cache
         run: |
           echo "Setting no-cache headers for HTML files..."
-          ossutil ls "oss://${{ env.OSS_BUCKET }}/${{ env.OSS_TARGET_PREFIX }}" --include "*.html" -s | \
-          while read file; do
-            if [[ "$file" == *.html ]]; then
-              echo "  -> no-cache: $file"
-              ossutil set-meta "oss://$file" "Cache-Control:no-cache,no-store,must-revalidate" --update
-            fi
+          # 使用 find 遍历本地目录获取相对路径，避免解析 ossutil ls 输出
+          cd "${{ env.LAB_DIR }}"
+          find . -name "*.html" -type f | sed 's|^\./||' | while read rel_path; do
+            full_key="${{ env.OSS_TARGET_PREFIX }}${rel_path}"
+            echo "  -> no-cache: $full_key"
+            ossutil set-meta \
+              "oss://${{ env.OSS_BUCKET }}/${full_key}" \
+              "Cache-Control:no-cache,no-store,must-revalidate" \
+              --update
           done
           echo "HTML cache headers updated successfully."
