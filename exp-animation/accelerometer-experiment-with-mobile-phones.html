@@ -2,311 +2,115 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>智能加速度计</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手机传感器物理实验</title>
+    <!-- 1. 添加CSP配置：放宽限制，允许同域和blob URL创建worker -->
+    <meta http-equiv="Content-Security-Policy" content="worker-src 'self' blob:; default-src 'self' https: data: 'unsafe-inline';">
+    <!-- 2. 引入Chart.js 2.9.4（不使用Web Workers） -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
     <style>
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-main: #e2e8f0;
-            --text-sub: #94a3b8;
-            --red: #ef4444;
-            --green: #22c55e;
-            --blue: #3b82f6;
-            --orange: #f59e0b;
-            --purple: #a855f7;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--bg-color); color: var(--text-main);
-            display: flex; flex-direction: column; align-items: center;
-            min-height: 100vh; padding: 16px; overflow-x: hidden;
-        }
-
-        h1 { font-size: 1.2rem; margin-bottom: 16px; letter-spacing: 1px; opacity: 0.9; }
-
-        /* 数值面板容器 */
-        .panel-grid {
-            width: 100%; max-width: 500px;
-            display: grid; gap: 10px;
-            margin-bottom: 16px;
-        }
-
-        .row { display: flex; gap: 10px; }
-        .row:first-child { margin-bottom: 0; }
-
-        /* 卡片样式 */
-        .val-card {
-            flex: 1; background: var(--card-bg); border-radius: 12px;
-            padding: 12px 8px; text-align: center;
-            border-bottom: 3px solid transparent;
-            transition: transform 0.1s;
-        }
-        
-        /* XYZ 轴颜色 */
-        .val-card.x { border-color: var(--red); }
-        .val-card.y { border-color: var(--green); }
-        .val-card.z { border-color: var(--blue); }
-        
-        /* 新增指标颜色 */
-        .val-card.total { border-color: var(--orange); }
-        .val-card.pitch { border-color: var(--purple); }
-        .val-card.roll { border-color: #ec4899; }
-
-        .val-label { font-size: 0.7rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-        .val-num { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-        
-        /* 数值高亮效果 */
-        .val-card.active { transform: scale(1.02); box-shadow: 0 0 15px rgba(255,255,255,0.1); }
-
-        /* 图表容器 */
-        .chart-wrap {
-            width: 100%; max-width: 500px; height: 180px;
-            background: var(--card-bg); border-radius: 12px; padding: 10px;
-            margin-bottom: 10px; position: relative;
-        }
-        /* 第二个图表稍微矮一点 */
-        .chart-wrap.small { height: 150px; }
-
-        /* 启动按钮 */
-        #startBtn {
-            margin-top: 10px; padding: 14px 40px;
-            font-size: 1rem; font-weight: 600; border: none; border-radius: 50px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            color: #fff; cursor: pointer; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
-            transition: all 0.2s;
-        }
-        #startBtn:active { transform: scale(0.95); }
-        #startBtn.hidden { display: none; }
-
-        .status { margin-top: 12px; font-size: 0.75rem; color: var(--text-sub); min-height: 1.2em; }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #chart-container { width: 100%; max-width: 600px; margin: 20px auto; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
-
-    <h1>📊 智能加速度计</h1>
-
-    <!-- 第一行：原始三轴数据 -->
-    <div class="panel-grid">
-        <div class="row">
-            <div class="val-card x">
-                <div class="val-label">X 轴</div>
-                <div class="val-num" id="vx">0.00</div>
-            </div>
-            <div class="val-card y">
-                <div class="val-label">Y 轴</div>
-                <div class="val-num" id="vy">0.00</div>
-            </div>
-            <div class="val-card z">
-                <div class="val-label">Z 轴</div>
-                <div class="val-num" id="vz">0.00</div>
-            </div>
-        </div>
-        
-        <!-- 第二行：合成数据 -->
-        <div class="row">
-            <div class="val-card total">
-                <div class="val-label">总强度</div>
-                <div class="val-num" id="vTotal">0.00</div>
-            </div>
-            <div class="val-card pitch">
-                <div class="val-label">俯仰角</div>
-                <div class="val-num" id="vPitch">0°</div>
-            </div>
-            <div class="val-card roll">
-                <div class="val-label">翻滚角</div>
-                <div class="val-num" id="vRoll">0°</div>
-            </div>
-        </div>
+    <h1>手机传感器物理实验</h1>
+    <p>请点击下方按钮开始测量，摇晃手机观察加速度变化。</p>
+    <button id="startBtn">开始测量</button>
+    <div id="chart-container">
+        <canvas id="accelerationChart"></canvas>
     </div>
+    <script>
+        // 获取DOM元素
+        const startBtn = document.getElementById('startBtn');
+        const canvas = document.getElementById('accelerationChart');
+        let chart;
+        let isMeasuring = false;
 
-    <!-- 图表1：三轴曲线 -->
-    <div class="chart-wrap">
-        <canvas id="accChart"></canvas>
-    </div>
-
-    <!-- 图表2：总强度曲线 -->
-    <div class="chart-wrap small">
-        <canvas id="magChart"></canvas>
-    </div>
-
-    <button id="startBtn">点击开始测量</button>
-    <div class="status" id="status">等待启动...</div>
-
-<script>
-// ========== 配置 ==========
-const MAX_POINTS = 80;       // 曲线保留点数
-const UPDATE_MS = 40;        // 刷新间隔(ms)
-
-// ========== Chart.js 初始化：三轴图表 ==========
-const ctx1 = document.getElementById('accChart').getContext('2d');
-const accChart = new Chart(ctx1, {
-    type: 'line',
-    data: {
-        labels: Array(MAX_POINTS).fill(''),
-        datasets: [
-            { label: 'X', data: [], borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.2 },
-            { label: 'Y', data: [], borderColor: '#22c55e', borderWidth: 2, pointRadius: 0, tension: 0.2 },
-            { label: 'Z', data: [], borderColor: '#3b82f6', borderWidth: 2, pointRadius: 0, tension: 0.2 }
-        ]
-    },
-    options: {
-        responsive: true, maintainAspectRatio: false, animation: false,
-        scales: {
-            x: { display: false },
-            y: { grid: { color: '#334155' }, ticks: { color: '#64748b' }, suggestedMin: -20, suggestedMax: 20 }
-        },
-        plugins: { legend: { display: true, labels: { color: '#94a3b8', boxWidth: 10, font: { size: 10 } } } }
-    }
-});
-
-// ========== Chart.js 初始化：总强度图表 ==========
-const ctx2 = document.getElementById('magChart').getContext('2d');
-const magChart = new Chart(ctx2, {
-    type: 'line',
-    data: {
-        labels: Array(MAX_POINTS).fill(''),
-        datasets: [{
-            label: '运动强度',
-            data: [],
-            borderColor: '#f59e0b', // 橙色
-            borderWidth: 2,
-            pointRadius: 0,
-            fill: true, // 填充区域
-            backgroundColor: 'rgba(245, 158, 11, 0.15)',
-            tension: 0.3
-        }]
-    },
-    options: {
-        responsive: true, maintainAspectRatio: false, animation: false,
-        scales: {
-            x: { display: false },
-            y: { 
-                grid: { color: '#334155' }, 
-                ticks: { color: '#64748b' },
-                suggestedMin: 0, 
-                suggestedMax: 25 
-            }
-        },
-        plugins: { legend: { display: false } }
-    }
-});
-
-// ========== DOM 引用 ==========
-const dom = {
-    vx: document.getElementById('vx'),
-    vy: document.getElementById('vy'),
-    vz: document.getElementById('vz'),
-    vTotal: document.getElementById('vTotal'),
-    vPitch: document.getElementById('vPitch'),
-    vRoll: document.getElementById('vRoll'),
-    btn: document.getElementById('startBtn'),
-    status: document.getElementById('status')
-};
-
-let lastUpdate = 0;
-
-// ========== 数据处理与更新 ==========
-function updateDisplay(x, y, z) {
-    // 1. 更新原始数值
-    dom.vx.textContent = x.toFixed(2);
-    dom.vy.textContent = y.toFixed(2);
-    dom.vz.textContent = z.toFixed(2);
-
-    // 2. 计算总强度
-    const total = Math.sqrt(x*x + y*y + z*z);
-    dom.vTotal.textContent = total.toFixed(2);
-
-    // 3. 计算角度 (仅当总强度接近重力时才准确，这里做演示用)
-    // 角度计算公式：
-    // Pitch (俯仰): atan2(x, sqrt(y^2 + z^2))
-    // Roll (翻滚): atan2(y, sqrt(x^2 + z^2))
-    // 只有当数值相对稳定时，角度才有意义。剧烈晃动时角度会乱跳。
-    const threshold = 8.0; // 简单过滤，运动太剧烈时角度无意义
-    if (total > 5) { // 避免除零错误
-        const pitchVal = Math.atan2(x, Math.sqrt(y*y + z*z)) * (180 / Math.PI);
-        const rollVal = Math.atan2(y, Math.sqrt(x*x + z*z)) * (180 / Math.PI);
-        
-        // 简单的平滑处理：如果剧烈运动，保持上次的值或显示 '--'
-        if (total > 15) {
-             dom.vPitch.textContent = "--";
-             dom.vRoll.textContent = "--";
-        } else {
-             dom.vPitch.textContent = pitchVal.toFixed(0) + "°";
-             dom.vRoll.textContent = rollVal.toFixed(0) + "°";
+        // 初始化图表
+        function initChart() {
+            const ctx = canvas.getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'X轴加速度', data: [], borderColor: 'red', fill: false },
+                        { label: 'Y轴加速度', data: [], borderColor: 'green', fill: false },
+                        { label: 'Z轴加速度', data: [], borderColor: 'blue', fill: false },
+                        { label: '合加速度', data: [], borderColor: 'black', fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: '时间 (s)' } },
+                        y: { title: { display: true, text: '加速度 (m/s²)' }, min: -15, max: 15 }
+                    }
+                }
+            });
         }
-    }
 
-    // 4. 更新图表 (节流控制)
-    const now = performance.now();
-    if (now - lastUpdate < UPDATE_MS) return;
-    lastUpdate = now;
-
-    // 更新三轴数据
-    accChart.data.datasets.forEach(ds => {
-        if (ds.data.length > MAX_POINTS) ds.data.shift();
-    });
-    accChart.data.datasets[0].data.push(x);
-    accChart.data.datasets[1].data.push(y);
-    accChart.data.datasets[2].data.push(z);
-    accChart.update('none');
-
-    // 更新强度数据
-    const magDs = magChart.data.datasets[0];
-    if (magDs.data.length > MAX_POINTS) magDs.data.shift();
-    magDs.data.push(total);
-    magChart.update('none');
-}
-
-// ========== 传感器监听逻辑 ==========
-function startSensor() {
-    if (!window.DeviceMotionEvent) {
-        dom.status.textContent = '❌ 当前浏览器不支持';
-        return;
-    }
-
-    window.addEventListener('devicemotion', (e) => {
-        // 优先使用 accelerationIncludingGravity (兼容性好，且包含重力分量)
-        // 如果需要去除重力，可尝试 e.acceleration，但在部分安卓机上可能为 null
-        const acc = e.accelerationIncludingGravity;
-        
-        if (acc && acc.x !== null) {
-            // 注意：Web API 中，iOS 和 Android 的坐标系方向可能不同
-            // 通常 x,y,z 即可满足可视化需求
-            updateDisplay(acc.x, acc.y, acc.z);
-            dom.status.textContent = '✅ 采集数据中... 移动手机查看变化';
-        } else {
-            dom.status.textContent = '⚠️ 无法获取加速度数据';
-        }
-    }, { passive: true });
-
-    dom.btn.classList.add('hidden');
-}
-
-// ========== iOS 权限处理 ==========
-dom.btn.addEventListener('click', async () => {
-    // iOS 13+ 需要显式请求权限
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        try {
-            const permission = await DeviceMotionEvent.requestPermission();
-            if (permission === 'granted') {
-                startSensor();
+        // 开始测量
+        startBtn.addEventListener('click', () => {
+            if (isMeasuring) {
+                stopMeasuring();
+                startBtn.textContent = '开始测量';
             } else {
-                dom.status.textContent = '❌ 用户拒绝了传感器权限';
+                startMeasuring();
+                startBtn.textContent = '停止测量';
             }
-        } catch (err) {
-            dom.status.textContent = '❌ 权限请求发生错误';
-            console.error(err);
+        });
+
+        // 开始测量函数
+        function startMeasuring() {
+            isMeasuring = true;
+            chart.data.labels = [];
+            chart.data.datasets.forEach(dataset => dataset.data = []);
+            chart.update();
+
+            // 监听设备运动事件
+            window.addEventListener('devicemotion', handleMotion);
         }
-    } else {
-        // 非 iOS 或旧版本，直接启动
-        startSensor();
-    }
-});
-</script>
+
+        // 停止测量函数
+        function stopMeasuring() {
+            isMeasuring = false;
+            window.removeEventListener('devicemotion', handleMotion);
+        }
+
+        // 处理设备运动数据
+        function handleMotion(event) {
+            const acc = event.accelerationIncludingGravity;
+            const x = acc.x || 0;
+            const y = acc.y || 0;
+            const z = acc.z || 0;
+            const total = Math.sqrt(x*x + y*y + z*z);
+
+            // 获取当前时间（秒）
+            const now = new Date();
+            const time = now.getSeconds() + now.getMilliseconds() / 1000;
+
+            // 添加数据到图表
+            chart.data.labels.push(time.toFixed(2));
+            chart.data.datasets[0].data.push(x);
+            chart.data.datasets[1].data.push(y);
+            chart.data.datasets[2].data.push(z);
+            chart.data.datasets[3].data.push(total);
+
+            // 限制数据点数量（保持图表清晰）
+            const maxDataPoints = 50;
+            if (chart.data.labels.length > maxDataPoints) {
+                chart.data.labels.shift();
+                chart.data.datasets.forEach(dataset => dataset.data.shift());
+            }
+
+            chart.update();
+        }
+
+        // 初始化图表
+        initChart();
+    </script>
 </body>
 </html>
