@@ -18,7 +18,7 @@
     - [弹簧振子实验](exp-animation/interactive-animation.md)
     - [机械波实验](exp-animation/mechanical-wave.md)
   - [手机口袋实验演示](exp-animation/README.md)
-    - [加速度实验](exp-animation/accelerometer-experiment-with-mobile=phones.md)
+    - [加速度实验](exp-animation/accelerometer-experiment-with-mobile-phones.md)
 
 - **核心技术**
   - [物理信息神经网络 PINNs](core-tech/pinns.md)
