@@ -4,7 +4,7 @@
    本实验利用手机内置的加速度传感器，通过HTML5的DeviceMotionEvent API实时采集运动数据，验证牛顿力学中的超重、失重现象，或分析运动强度。
 
    ## 在线工具
-   [点击访问实验工具](./accelerometer-experiment-with-mobile-phones.html)  
+   [点击访问实验工具](/exp-animation/accelerometer-experiment-with-mobile-phones.md)  
    *（请用Chrome或手机自带浏览器打开，微信/QQ内需“在浏览器中打开”）*
 
    ## 实验原理
