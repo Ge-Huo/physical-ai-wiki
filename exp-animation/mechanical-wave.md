@@ -9,7 +9,7 @@
 
 点击下方按钮，将在新标签页中打开全屏交互式仿真环境。
 <div style="margin-top: 20px; margin-bottom: 20px;">
-    <a href="exp-animation/demos/mechanics/mechanical-wave.html" target="_blank">
+    <a href="https://ge-huo.github.io/physical-ai-wiki/exp-animation/demos/mechanics/mechanical-wave.html" target="_blank">
         <button 
             style="
                 background-color: #007bff; 
