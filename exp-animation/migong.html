@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>体感迷宫 · 困难模式</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            overflow: hidden;
+            background: #0a0a1a;
+            font-family: 'Segoe UI', -apple-system, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        #game-container { width: 100vw; height: 100vh; display: block; }
+        #ui-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 18px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+            color: #fff;
+            font-size: 14px;
+            pointer-events: auto;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        #top-bar .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        #top-bar .stat .icon { font-size: 18px; }
+        #top-bar .stat .val {
+            font-weight: 700;
+            font-size: 16px;
+            min-width: 30px;
+        }
+        #top-bar .stat .val.gold { color: #ffd740; }
+        #top-bar .stat .val.danger { color: #ff5252; }
+        #top-bar .stat .val.cyan { color: #4fc3f7; }
+
+        #bottom-hint {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 10px 22px;
+            border-radius: 30px;
+            color: rgba(255,255,255,0.7);
+            font-size: 13px;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(255,255,255,0.06);
+            pointer-events: none;
+            white-space: nowrap;
+            transition: opacity 0.6s;
+        }
+        #bottom-hint .highlight { color: #ffd740; font-weight: 600; }
+        #bottom-hint .danger { color: #ff5252; font-weight: 600; }
+
+        #modal {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10,10,26,0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            pointer-events: auto;
+            z-index: 20;
+            transition: opacity 0.5s ease;
+            padding: 20px;
+        }
+        #modal.hidden { opacity: 0; pointer-events: none; }
+        #modal .card {
+            background: rgba(20,30,60,0.9);
+            border: 1px solid rgba(96,165,250,0.15);
+            border-radius: 24px;
+            padding: 36px 32px 32px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+        }
+        #modal .card .emoji { font-size: 56px; margin-bottom: 8px; }
+        #modal .card h2 { color: #fff; font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+        #modal .card p { color: rgba(255,255,255,0.6); font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+        #modal .card .btn {
+            background: linear-gradient(135deg, #4fc3f7, #2196f3);
+            border: none;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            padding: 14px 40px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(79,195,247,0.3);
+            pointer-events: auto;
+            width: 100%;
+            touch-action: manipulation;
+        }
+        #modal .card .btn:hover { transform: scale(1.02); box-shadow: 0 6px 28px rgba(79,195,247,0.4); }
+        #modal .card .btn:active { transform: scale(0.97); }
+        #modal .card .btn.secondary {
+            background: rgba(255,255,255,0.08);
+            box-shadow: none;
+            margin-top: 10px;
+        }
+        #modal .card .btn.secondary:hover { background: rgba(255,255,255,0.14); }
+        #modal .card .stats-final {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 16px 0 20px;
+        }
+        #modal .card .stats-final .item { text-align: center; }
+        #modal .card .stats-final .item .num {
+            font-size: 28px;
+            font-weight: 700;
+        }
+        #modal .card .stats-final .item .num.gold { color: #ffd740; }
+        #modal .card .stats-final .item .num.danger { color: #ff5252; }
+        #modal .card .stats-final .item .num.cyan { color: #4fc3f7; }
+        #modal .card .stats-final .item .lbl {
+            color: rgba(255,255,255,0.4);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 2px;
+        }
+        #calibrate-tip {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 20px 28px;
+            border-radius: 16px;
+            color: #fff;
+            text-align: center;
+            pointer-events: none;
+            z-index: 15;
+            transition: opacity 0.5s;
+            border: 1px solid rgba(79,195,247,0.2);
+            max-width: 85%;
+        }
+        #calibrate-tip.hidden { opacity: 0; pointer-events: none; }
+        #calibrate-tip .icon { font-size: 40px; display: block; margin-bottom: 8px; }
+        #calibrate-tip .title { font-size: 16px; font-weight: 600; }
+        #calibrate-tip .desc { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+
+        @media (max-width: 480px) {
+            #top-bar { padding: 10px 14px; font-size: 12px; }
+            #top-bar .stat .val { font-size: 14px; }
+            #modal .card { padding: 28px 20px 24px; }
+            #modal .card .emoji { font-size: 44px; }
+            #modal .card h2 { font-size: 19px; }
+            #bottom-hint { font-size: 11px; padding: 8px 16px; bottom: 20px; }
+        }
+        @media (orientation: landscape) and (max-height: 500px) {
+            #bottom-hint { bottom: 12px; font-size: 10px; padding: 5px 14px; }
+            #top-bar { padding: 6px 14px; font-size: 11px; }
+            #modal .card { padding: 20px 16px 18px; }
+            #modal .card .emoji { font-size: 32px; }
+            #modal .card h2 { font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <div id="ui-overlay">
+        <div id="top-bar">
+            <div class="stat">
+                <span class="icon">⏱</span>
+                <span class="val danger" id="timer-display">60</span><span style="font-size:11px;color:rgba(255,255,255,0.4);">s</span>
+            </div>
+            <div class="stat">
+                <span class="icon">👣</span>
+                <span class="val gold" id="steps-display">0</span><span style="font-size:11px;color:rgba(255,255,255,0.4);">/300</span>
+            </div>
+            <div class="stat">
+                <span class="icon">🏁</span>
+                <span class="val cyan" id="progress-display" style="font-size:13px;">0%</span>
+            </div>
+        </div>
+
+        <div id="calibrate-tip" class="hidden">
+            <span class="icon">📱</span>
+            <div class="title">校准中...</div>
+            <div class="desc">请将手机平放，保持静止 1 秒</div>
+        </div>
+
+        <div id="bottom-hint">
+            🎯 倾斜手机控制 · <span class="danger">60秒</span> 内到达终点 · 步数 ≤ <span class="highlight">300</span>
+        </div>
+
+        <div id="modal">
+            <div class="card" id="modal-card">
+                <div class="emoji" id="modal-emoji">🧭</div>
+                <h2 id="modal-title">体感迷宫 · 困难</h2>
+                <p id="modal-desc">
+                    更复杂的迷宫 · 更窄的通道<br>
+                    ⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 步数 ≤ <span style="color:#ffd740;">300</span>
+                </p>
+                <div id="modal-stats" style="display:none;">
+                    <div class="stats-final">
+                        <div class="item">
+                            <div class="num" id="final-time">0</div>
+                            <div class="lbl">用时 (秒)</div>
+                        </div>
+                        <div class="item">
+                            <div class="num gold" id="final-steps">0</div>
+                            <div class="lbl">步数</div>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn" id="modal-btn">🎮 开始挑战</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ================================================================
+        //  1. 困难迷宫 (13x13, 更多死路)
+        // ================================================================
+        const MAZE = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,1,0,0,0,0,0,1,0,1],
+            [1,0,1,0,1,0,1,1,1,0,1,0,1],
+            [1,0,1,0,0,0,0,0,1,0,0,0,1],
+            [1,0,1,1,1,1,1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,1,0,1],
+            [1,1,1,1,1,0,1,1,1,0,1,0,1],
+            [1,0,0,0,1,0,0,0,1,0,0,0,1],
+            [1,0,1,1,1,1,1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,1,1,0,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        const ROWS = MAZE.length;
+        const COLS = MAZE[0].length;
+        const START = { r: 1, c: 1 };
+        const END = { r: 11, c: 11 };
+
+        // ================================================================
+        //  2. 游戏状态 (增加难度参数)
+        // ================================================================
+        const game = {
+            running: false,
+            finished: false,
+            failed: false,
+            steps: 0,
+            maxSteps: 300,
+            timeLimit: 60, // 秒
+            startTime: 0,
+            elapsed: 0,
+            ballPos: { x: START.c + 0.5, z: START.r + 0.5 },
+            velocity: { x: 0, z: 0 },
+            // 物理参数 (通道变窄: 减小ballRadius)
+            maxSpeed: 3.0,
+            acceleration: 9.0,
+            friction: 0.90,
+            bounce: 0.40,
+            ballRadius: 0.28, // 更小 -> 通道相对更窄
+            tiltX: 0,
+            tiltZ: 0,
+            calibrated: false,
+            calibBeta: 0,
+            calibGamma: 0,
+            timerInterval: null,
+        };
+
+        // ================================================================
+        //  3. Three.js 场景
+        // ================================================================
+        const container = document.getElementById('game-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.Fog(0x0a0a1a, 20, 35);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 50);
+        camera.position.set(8, 11, 11);
+        camera.lookAt(6.5, 0, 6.5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.target.set(6.5, 0.5, 6.5);
+        controls.minDistance = 5;
+        controls.maxDistance = 25;
+        controls.maxPolarAngle = Math.PI / 2.1;
+        controls.minPolarAngle = Math.PI / 6;
+        controls.update();
+
+        // ---- 灯光 ----
+        const ambientLight = new THREE.AmbientLight(0x334466, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.6);
+        dirLight.position.set(10, 18, 6);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.1;
+        dirLight.shadow.camera.far = 40;
+        dirLight.shadow.camera.left = -20;
+        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.camera.top = 20;
+        dirLight.shadow.camera.bottom = -20;
+        scene.add(dirLight);
+        const fillLight = new THREE.DirectionalLight(0x4488ff, 0.4);
+        fillLight.position.set(-6, 4, -10);
+        scene.add(fillLight);
+        const hemiLight = new THREE.HemisphereLight(0x4488ff, 0x002244, 0.5);
+        scene.add(hemiLight);
+
+        // ================================================================
+        //  4. 构建迷宫 (墙壁加厚)
+        // ================================================================
+        const wallGroup = new THREE.Group();
+        scene.add(wallGroup);
+        const WALL_HEIGHT = 0.9;
+        const WALL_THICK = 0.14;
+        const CELL_SIZE = 1.0;
+        const wallPositions = [];
+
+        const wallMat = new THREE.MeshStandardMaterial({
+            color: 0x4a6a8a,
+            roughness: 0.4,
+            metalness: 0.1,
+            emissive: 0x1a2a4a,
+            emissiveIntensity: 0.05,
+        });
+        const wallMatTop = new THREE.MeshStandardMaterial({
+            color: 0x5a7a9a,
+            roughness: 0.3,
+            metalness: 0.05,
+            emissive: 0x2a3a5a,
+            emissiveIntensity: 0.03,
+        });
+
+        // 地板
+        const floorMat = new THREE.MeshStandardMaterial({
+            color: 0x111a2a,
+            roughness: 0.7,
+            metalness: 0.1,
+        });
+        const floorGeo = new THREE.PlaneGeometry(COLS, ROWS);
+        const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.position.set(COLS / 2, -0.01, ROWS / 2);
+        floorMesh.receiveShadow = true;
+        scene.add(floorMesh);
+
+        const gridHelper = new THREE.GridHelper(Math.max(COLS, ROWS), Math.max(COLS, ROWS), 0x1a2a4a, 0x0a1a2a);
+        gridHelper.position.set(COLS / 2, 0, ROWS / 2);
+        scene.add(gridHelper);
+
+        function buildMaze() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (MAZE[r][c] === 1) {
+                        const x = c + 0.5;
+                        const z = r + 0.5;
+                        const geo = new THREE.BoxGeometry(CELL_SIZE - 0.02, WALL_HEIGHT, CELL_SIZE - 0.02);
+                        const mesh = new THREE.Mesh(geo, wallMat);
+                        mesh.position.set(x, WALL_HEIGHT / 2, z);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        wallGroup.add(mesh);
+                        wallPositions.push({ x, z });
+                        const topGeo = new THREE.BoxGeometry(CELL_SIZE - 0.04, 0.04, CELL_SIZE - 0.04);
+                        const topMesh = new THREE.Mesh(topGeo, wallMatTop);
+                        topMesh.position.set(x, WALL_HEIGHT + 0.02, z);
+                        wallGroup.add(topMesh);
+                    }
+                }
+            }
+        }
+        buildMaze();
+
+        // ---- 起点 ----
+        const startMat = new THREE.MeshBasicMaterial({ color: 0x00e676, transparent: true, opacity: 0.4, side: THREE
+                .DoubleSide });
+        const startRing = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.5, 32), startMat);
+        startRing.rotation.x = -Math.PI / 2;
+        startRing.position.set(START.c + 0.5, 0.02, START.r + 0.5);
+        scene.add(startRing);
+        const startGlow = new THREE.Mesh(
+            new THREE.CircleGeometry(0.4, 16),
+            new THREE.MeshBasicMaterial({ color: 0x00e676, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
+        );
+        startGlow.rotation.x = -Math.PI / 2;
+        startGlow.position.set(START.c + 0.5, 0.01, START.r + 0.5);
+        scene.add(startGlow);
+
+        // ---- 终点 ----
+        const endMat = new THREE.MeshBasicMaterial({ color: 0xff1744, transparent: true, opacity: 0.5, side: THREE
+                .DoubleSide });
+        const endRing = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.5, 32), endMat);
+        endRing.rotation.x = -Math.PI / 2;
+        endRing.position.set(END.c + 0.5, 0.02, END.r + 0.5);
+        scene.add(endRing);
+        const endGlow = new THREE.Mesh(
+            new THREE.CircleGeometry(0.45, 16),
+            new THREE.MeshBasicMaterial({ color: 0xff1744, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
+        );
+        endGlow.rotation.x = -Math.PI / 2;
+        endGlow.position.set(END.c + 0.5, 0.01, END.r + 0.5);
+        scene.add(endGlow);
+        const pillarMat2 = new THREE.MeshBasicMaterial({
+            color: 0xff1744,
+            transparent: true,
+            opacity: 0.06,
+            side: THREE.DoubleSide,
+        });
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.15, 2.5, 8), pillarMat2);
+        pillar.position.set(END.c + 0.5, 1.25, END.r + 0.5);
+        scene.add(pillar);
+
+        // ---- 小球 (更小) ----
+        const ballMat = new THREE.MeshPhysicalMaterial({
+            color: 0x4fc3f7,
+            roughness: 0.15,
+            metalness: 0.3,
+            clearcoat: 0.4,
+            clearcoatRoughness: 0.2,
+            emissive: 0x4fc3f7,
+            emissiveIntensity: 0.05,
+        });
+        const ballGeo = new THREE.SphereGeometry(game.ballRadius, 32, 32);
+        const ball = new THREE.Mesh(ballGeo, ballMat);
+        ball.castShadow = true;
+        ball.receiveShadow = true;
+        ball.position.set(START.c + 0.5, game.ballRadius, START.r + 0.5);
+        scene.add(ball);
+
+        const glowMat2 = new THREE.MeshBasicMaterial({
+            color: 0x4fc3f7,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.BackSide,
+        });
+        const glowMesh = new THREE.Mesh(new THREE.SphereGeometry(game.ballRadius * 1.8, 16, 16), glowMat2);
+        glowMesh.position.copy(ball.position);
+        scene.add(glowMesh);
+
+        // ================================================================
+        //  5. 碰撞检测 (适配更窄通道)
+        // ================================================================
+        function checkCollision(x, z, radius) {
+            if (x - radius < 0 || x + radius > COLS || z - radius < 0 || z + radius > ROWS) return true;
+            const col = Math.floor(x);
+            const row = Math.floor(z);
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    const r = row + dr;
+                    const c = col + dc;
+                    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+                    if (MAZE[r][c] === 1) {
+                        const wx = c + 0.5;
+                        const wz = r + 0.5;
+                        const dx = x - wx;
+                        const dz = z - wz;
+                        const dist = Math.sqrt(dx * dx + dz * dz);
+                        const minDist = radius + 0.5;
+                        if (dist < minDist) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function resolveCollision(x, z, radius) {
+            let newX = x, newZ = z;
+            const col = Math.floor(x);
+            const row = Math.floor(z);
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    const r = row + dr;
+                    const c = col + dc;
+                    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+                    if (MAZE[r][c] === 1) {
+                        const wx = c + 0.5;
+                        const wz = r + 0.5;
+                        const dx = x - wx;
+                        const dz = z - wz;
+                        const dist = Math.sqrt(dx * dx + dz * dz);
+                        const minDist = radius + 0.5;
+                        if (dist < minDist && dist > 0.001) {
+                            const nx = dx / dist;
+                            const nz = dz / dist;
+                            const overlap = minDist - dist;
+                            newX += nx * overlap * 1.1;
+                            newZ += nz * overlap * 1.1;
+                        }
+                    }
+                }
+            }
+            newX = Math.max(radius, Math.min(COLS - radius, newX));
+            newZ = Math.max(radius, Math.min(ROWS - radius, newZ));
+            return { x: newX, z: newZ };
+        }
+
+        // ================================================================
+        //  6. 物理更新 + 步数/计时检查
+        // ================================================================
+        function updatePhysics(dt) {
+            if (!game.running || game.finished || game.failed) return;
+
+            const accelX = game.tiltX * game.acceleration;
+            const accelZ = game.tiltZ * game.acceleration;
+
+            game.velocity.x += accelX * dt;
+            game.velocity.z += accelZ * dt;
+            game.velocity.x *= Math.pow(game.friction, dt * 60);
+            game.velocity.z *= Math.pow(game.friction, dt * 60);
+
+            const speed = Math.sqrt(game.velocity.x * game.velocity.x + game.velocity.z * game.velocity.z);
+            if (speed > game.maxSpeed) {
+                game.velocity.x = (game.velocity.x / speed) * game.maxSpeed;
+                game.velocity.z = (game.velocity.z / speed) * game.maxSpeed;
+            }
+            if (Math.abs(game.velocity.x) < 0.001) game.velocity.x = 0;
+            if (Math.abs(game.velocity.z) < 0.001) game.velocity.z = 0;
+
+            let newX = game.ballPos.x + game.velocity.x * dt;
+            let newZ = game.ballPos.z + game.velocity.z * dt;
+
+            if (checkCollision(newX, newZ, game.ballRadius)) {
+                const testX = game.ballPos.x + game.velocity.x * dt;
+                const testZ = game.ballPos.z;
+                if (!checkCollision(testX, testZ, game.ballRadius)) {
+                    newX = testX; newZ = testZ;
+                } else {
+                    const testX2 = game.ballPos.x;
+                    const testZ2 = game.ballPos.z + game.velocity.z * dt;
+                    if (!checkCollision(testX2, testZ2, game.ballRadius)) {
+                        newX = testX2; newZ = testZ2;
+                    } else {
+                        game.velocity.x *= -game.bounce;
+                        game.velocity.z *= -game.bounce;
+                        newX = game.ballPos.x;
+                        newZ = game.ballPos.z;
+                    }
+                }
+            }
+            const resolved = resolveCollision(newX, newZ, game.ballRadius);
+            game.ballPos.x = resolved.x;
+            game.ballPos.z = resolved.z;
+
+            ball.position.x = game.ballPos.x;
+            ball.position.z = game.ballPos.z;
+            ball.position.y = game.ballRadius + 0.01;
+            ball.rotation.x += game.velocity.z * dt * 2;
+            ball.rotation.z -= game.velocity.x * dt * 2;
+            glowMesh.position.copy(ball.position);
+
+            const moveDist = Math.sqrt((game.velocity.x * dt) ** 2 + (game.velocity.z * dt) ** 2);
+            if (moveDist > 0.01) {
+                game.steps++;
+                document.getElementById('steps-display').textContent = game.steps;
+                if (game.steps > game.maxSteps) {
+                    failGame('步数超限 ( > ' + game.maxSteps + ' )');
+                    return;
+                }
+            }
+
+            const dx = game.ballPos.x - (END.c + 0.5);
+            const dz = game.ballPos.z - (END.r + 0.5);
+            if (dx * dx + dz * dz < 0.3 * 0.3) {
+                winGame();
+                return;
+            }
+
+            const totalDist = Math.sqrt((END.c - START.c) ** 2 + (END.r - START.r) ** 2);
+            const currentDist = Math.sqrt(
+                (game.ballPos.x - (START.c + 0.5)) ** 2 +
+                (game.ballPos.z - (START.r + 0.5)) ** 2
+            );
+            let progress = Math.min(100, (currentDist / totalDist) * 100);
+            if (progress > 95) progress = 95;
+            document.getElementById('progress-display').textContent = Math.round(progress) + '%';
+        }
+
+        // ================================================================
+        //  7. 胜利/失败
+        // ================================================================
+        function winGame() {
+            if (game.finished || game.failed) return;
+            game.finished = true;
+            game.running = false;
+            if (game.timerInterval) {
+                clearInterval(game.timerInterval);
+                game.timerInterval = null;
+            }
+            game.elapsed = (Date.now() - game.startTime) / 1000;
+
+            document.getElementById('modal-emoji').textContent = '🎉';
+            document.getElementById('modal-title').textContent = '🏆 通关成功！';
+            document.getElementById('modal-desc').textContent = '你成功走出了困难迷宫！';
+            document.getElementById('final-time').textContent = Math.round(game.elapsed);
+            document.getElementById('final-steps').textContent = game.steps;
+            document.getElementById('modal-stats').style.display = 'block';
+            document.getElementById('modal-btn').textContent = '🔄 再来一局';
+            document.getElementById('modal').classList.remove('hidden');
+
+            ballMat.emissiveIntensity = 0.8;
+            ballMat.color.setHex(0xffd740);
+            createWinParticles();
+            document.getElementById('bottom-hint').innerHTML = '🎉 恭喜通关！';
+        }
+
+        function failGame(reason) {
+            if (game.finished || game.failed) return;
+            game.failed = true;
+            game.running = false;
+            if (game.timerInterval) {
+                clearInterval(game.timerInterval);
+                game.timerInterval = null;
+            }
+            document.getElementById('modal-emoji').textContent = '😵';
+            document.getElementById('modal-title').textContent = '挑战失败';
+            document.getElementById('modal-desc').textContent = reason || '再试一次吧！';
+            document.getElementById('modal-stats').style.display = 'none';
+            document.getElementById('modal-btn').textContent = '🔄 重新挑战';
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('bottom-hint').innerHTML = '💪 失败是成功之母，再试一次！';
+        }
+
+        function createWinParticles() {
+            const count = 80;
+            const colors = [0xff1744, 0xffd740, 0x4fc3f7, 0x00e676, 0xff6d00];
+            for (let i = 0; i < count; i++) {
+                const size = 0.03 + Math.random() * 0.08;
+                const geo = new THREE.SphereGeometry(size, 6, 6);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    transparent: true,
+                    opacity: 1,
+                });
+                const p = new THREE.Mesh(geo, mat);
+                p.position.copy(ball.position);
+                p.position.y += 0.3;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI * 0.8 + 0.1;
+                const speed = 1 + Math.random() * 2;
+                p.userData = {
+                    vx: Math.cos(theta) * Math.sin(phi) * speed,
+                    vy: Math.cos(phi) * speed + 1,
+                    vz: Math.sin(theta) * Math.sin(phi) * speed,
+                    life: 1.0,
+                    decay: 0.6 + Math.random() * 0.6,
+                };
+                scene.add(p);
+                winParticles.push(p);
+            }
+        }
+
+        const winParticles = [];
+
+        function updateWinParticles(dt) {
+            for (let i = winParticles.length - 1; i >= 0; i--) {
+                const p = winParticles[i];
+                p.userData.vy -= 3.0 * dt;
+                p.position.x += p.userData.vx * dt;
+                p.position.y += p.userData.vy * dt;
+                p.position.z += p.userData.vz * dt;
+                p.userData.life -= p.userData.decay * dt;
+                p.material.opacity = Math.max(0, p.userData.life);
+                p.scale.setScalar(p.userData.life);
+                if (p.userData.life <= 0 || p.position.y < -1) {
+                    scene.remove(p);
+                    winParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // ================================================================
+        //  8. 计时器
+        // ================================================================
+        function startTimer() {
+            let remaining = game.timeLimit;
+            document.getElementById('timer-display').textContent = remaining;
+            if (game.timerInterval) clearInterval(game.timerInterval);
+            game.timerInterval = setInterval(() => {
+                if (!game.running || game.finished || game.failed) {
+                    return;
+                }
+                remaining--;
+                document.getElementById('timer-display').textContent = remaining;
+                if (remaining <= 0) {
+                    failGame('时间到 ( > ' + game.timeLimit + 's )');
+                }
+            }, 1000);
+        }
+
+        // ================================================================
+        //  9. 传感器控制
+        // ================================================================
+        let sensorActive = false;
+
+        function initSensor() {
+            if (typeof DeviceOrientationEvent === 'undefined') {
+                document.getElementById('bottom-hint').innerHTML =
+                    '⌨️ 键盘 WASD / 方向键 控制 · 60秒内到达终点 · 步数≤300';
+                return;
+            }
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(state => {
+                        if (state === 'granted') {
+                            window.addEventListener('deviceorientation', onDeviceOrientation);
+                            sensorActive = true;
+                            showCalibrateTip();
+                        } else {
+                            document.getElementById('bottom-hint').innerHTML =
+                                '❌ 传感器权限被拒绝，请使用键盘 WASD 控制';
+                        }
+                    })
+                    .catch(() => {
+                        document.getElementById('bottom-hint').innerHTML =
+                            '❌ 传感器不可用，请使用键盘 WASD 控制';
+                    });
+            } else {
+                window.addEventListener('deviceorientation', onDeviceOrientation);
+                sensorActive = true;
+                showCalibrateTip();
+            }
+        }
+
+        function onDeviceOrientation(e) {
+            const beta = e.beta || 0;
+            const gamma = e.gamma || 0;
+            if (!game.calibrated) {
+                game.calibBeta = beta;
+                game.calibGamma = gamma;
+                game.calibrated = true;
+                document.getElementById('calibrate-tip').classList.add('hidden');
+                return;
+            }
+            let tiltZ = (beta - game.calibBeta) / 30;
+            let tiltX = (gamma - game.calibGamma) / 30;
+            tiltZ = Math.max(-1, Math.min(1, tiltZ));
+            tiltX = Math.max(-1, Math.min(1, tiltX));
+            const deadZone = 0.04;
+            if (Math.abs(tiltX) < deadZone) tiltX = 0;
+            if (Math.abs(tiltZ) < deadZone) tiltZ = 0;
+            game.tiltX += (tiltX - game.tiltX) * 0.15;
+            game.tiltZ += (tiltZ - game.tiltZ) * 0.15;
+        }
+
+        function showCalibrateTip() {
+            const tip = document.getElementById('calibrate-tip');
+            tip.classList.remove('hidden');
+            setTimeout(() => {
+                if (game.calibrated) tip.classList.add('hidden');
+            }, 2000);
+        }
+
+        // ================================================================
+        //  10. 键盘控制
+        // ================================================================
+        const keys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
+
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keys.w = true;
+            if (key === 'a') keys.a = true;
+            if (key === 's') keys.s = true;
+            if (key === 'd') keys.d = true;
+            if (key === 'arrowup') keys.up = true;
+            if (key === 'arrowdown') keys.down = true;
+            if (key === 'arrowleft') keys.left = true;
+            if (key === 'arrowright') keys.right = true;
+            if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key)) e.preventDefault();
+        });
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keys.w = false;
+            if (key === 'a') keys.a = false;
+            if (key === 's') keys.s = false;
+            if (key === 'd') keys.d = false;
+            if (key === 'arrowup') keys.up = false;
+            if (key === 'arrowdown') keys.down = false;
+            if (key === 'arrowleft') keys.left = false;
+            if (key === 'arrowright') keys.right = false;
+        });
+
+        function updateKeyboard() {
+            let tx = 0, tz = 0;
+            if (keys.w || keys.up) tz = -1;
+            if (keys.s || keys.down) tz = 1;
+            if (keys.a || keys.left) tx = -1;
+            if (keys.d || keys.right) tx = 1;
+            const len = Math.sqrt(tx * tx + tz * tz);
+            if (len > 0) {
+                tx /= len; tz /= len;
+                game.tiltX += (tx * 0.6 - game.tiltX) * 0.12;
+                game.tiltZ += (tz * 0.6 - game.tiltZ) * 0.12;
+            } else {
+                game.tiltX *= 0.95;
+                game.tiltZ *= 0.95;
+                if (Math.abs(game.tiltX) < 0.001) game.tiltX = 0;
+                if (Math.abs(game.tiltZ) < 0.001) game.tiltZ = 0;
+            }
+        }
+
+        // ================================================================
+        //  11. UI 控制
+        // ================================================================
+        const modal = document.getElementById('modal');
+        const modalBtn = document.getElementById('modal-btn');
+
+        function resetGame() {
+            game.running = false;
+            game.finished = false;
+            game.failed = false;
+            game.steps = 0;
+            game.elapsed = 0;
+            game.ballPos.x = START.c + 0.5;
+            game.ballPos.z = START.r + 0.5;
+            game.velocity.x = 0;
+            game.velocity.z = 0;
+            game.tiltX = 0;
+            game.tiltZ = 0;
+            if (game.timerInterval) {
+                clearInterval(game.timerInterval);
+                game.timerInterval = null;
+            }
+            ball.position.set(game.ballPos.x, game.ballRadius, game.ballPos.z);
+            ball.rotation.set(0, 0, 0);
+            ballMat.emissiveIntensity = 0.05;
+            ballMat.color.setHex(0x4fc3f7);
+            glowMesh.position.copy(ball.position);
+            for (const p of winParticles) {
+                scene.remove(p);
+            }
+            winParticles.length = 0;
+            document.getElementById('steps-display').textContent = '0';
+            document.getElementById('timer-display').textContent = game.timeLimit;
+            document.getElementById('progress-display').textContent = '0%';
+            document.getElementById('modal-stats').style.display = 'none';
+            document.getElementById('bottom-hint').innerHTML =
+                '🎯 倾斜手机控制 · <span class="danger">60秒</span> 内到达终点 · 步数 ≤ <span class="highlight">300</span>';
+            game.calibrated = false;
+            if (sensorActive) showCalibrateTip();
+            document.getElementById('modal-emoji').textContent = '🧭';
+            document.getElementById('modal-title').textContent = '体感迷宫 · 困难';
+            document.getElementById('modal-desc').innerHTML =
+                '更复杂的迷宫 · 更窄的通道<br>⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 步数 ≤ <span style="color:#ffd740;">300</span>';
+            modalBtn.textContent = '🎮 开始挑战';
+            modal.classList.remove('hidden');
+        }
+
+        function startGame() {
+            game.running = true;
+            game.finished = false;
+            game.failed = false;
+            game.startTime = Date.now();
+            game.steps = 0;
+            document.getElementById('steps-display').textContent = '0';
+            document.getElementById('timer-display').textContent = game.timeLimit;
+            modal.classList.add('hidden');
+            startTimer();
+            if (!sensorActive) {
+                document.getElementById('bottom-hint').innerHTML =
+                    '⌨️ 键盘 WASD / 方向键 控制 · 60秒内到达终点 · 步数≤300';
+            }
+        }
+
+        modalBtn.addEventListener('click', () => {
+            if (game.finished || game.failed || game.running) {
+                resetGame();
+                requestAnimationFrame(() => { startGame(); });
+            } else {
+                startGame();
+            }
+        });
+
+        // ================================================================
+        //  12. 窗口自适应
+        // ================================================================
+        window.addEventListener('resize', () => {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        });
+
+        // ================================================================
+        //  13. 主循环
+        // ================================================================
+        let lastTime = 0;
+
+        function animate(time) {
+            const dt = Math.min((time - lastTime) / 1000, 0.05);
+            lastTime = time;
+
+            if (!sensorActive || !game.calibrated) {
+                updateKeyboard();
+            }
+
+            if (game.running) {
+                updatePhysics(dt);
+            }
+
+            updateWinParticles(dt);
+
+            const pulse = 0.6 + 0.4 * Math.sin(time / 500);
+            endRing.material.opacity = 0.3 + 0.3 * pulse;
+            endGlow.material.opacity = 0.08 + 0.1 * pulse;
+            pillar.material.opacity = 0.04 + 0.04 * pulse;
+            pillar.scale.y = 1 + 0.3 * pulse;
+            startRing.material.opacity = 0.3 + 0.2 * Math.sin(time / 700 + 1);
+            glowMesh.position.lerp(ball.position, 0.1);
+
+            controls.update();
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        // ================================================================
+        //  14. 启动
+        // ================================================================
+        initSensor();
+        animate(0);
+        resetGame(); // 显示开始界面
+        console.log('🧭 体感迷宫 · 困难模式 已加载！');
+        console.log('⏱ 60秒倒计时 · 步数上限300 · 通道更窄');
+    </script>
+</body>
+</html>

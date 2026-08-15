@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>杨氏双缝干涉 - 3D 物理教学演示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #080816;
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+
+        #ui-panel {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 320px;
+            background: rgba(8, 12, 30, 0.94);
+            backdrop-filter: blur(16px);
+            border-radius: 14px;
+            padding: 20px;
+            color: #e8ecf4;
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            user-select: none;
+            z-index: 100;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 8px 50px rgba(0, 0, 0, 0.8);
+            max-height: 92vh;
+            overflow-y: auto;
+        }
+        #ui-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+        #ui-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #ui-panel::-webkit-scrollbar-thumb {
+            background: rgba(96, 165, 250, 0.3);
+            border-radius: 2px;
+        }
+
+        #ui-panel.collapsed {
+            width: 56px;
+            padding: 12px 14px;
+            cursor: pointer;
+            overflow: hidden;
+        }
+        #ui-panel.collapsed .panel-content {
+            opacity: 0;
+            pointer-events: none;
+            max-height: 0;
+        }
+        #ui-panel.collapsed .panel-header h2 {
+            display: none;
+        }
+        #ui-panel.collapsed .panel-header {
+            margin-bottom: 0;
+        }
+        #ui-panel.collapsed .panel-toggle span {
+            transform: rotate(0deg);
+        }
+        #ui-panel.collapsed .panel-toggle::after {
+            content: '☰';
+            font-size: 20px;
+        }
+        #ui-panel.collapsed .panel-toggle span {
+            display: none;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+            min-height: 28px;
+        }
+        .panel-header h2 {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .panel-header h2 .icon {
+            font-size: 18px;
+            -webkit-text-fill-color: initial;
+        }
+
+        .panel-toggle {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 18px;
+            transition: all 0.3s;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .panel-toggle:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }
+        .panel-toggle span {
+            display: inline-block;
+            transition: transform 0.4s;
+            transform: rotate(180deg);
+        }
+        #ui-panel.collapsed .panel-toggle span {
+            transform: rotate(0deg);
+        }
+        #ui-panel.collapsed .panel-toggle::after {
+            content: '⚡';
+            font-size: 20px;
+        }
+        #ui-panel.collapsed .panel-toggle span {
+            display: none;
+        }
+
+        .panel-content {
+            transition: all 0.4s ease;
+            max-height: 800px;
+            overflow: hidden;
+        }
+
+        .control-group {
+            margin-bottom: 12px;
+        }
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 3px;
+            color: #94a3b8;
+            letter-spacing: 0.3px;
+        }
+        .control-group label .sym {
+            color: #60a5fa;
+            font-style: italic;
+            margin-right: 4px;
+        }
+        .control-group input[type=range] {
+            width: 100%;
+            accent-color: #60a5fa;
+            cursor: pointer;
+            height: 4px;
+            background: #1a2a4a;
+            border-radius: 2px;
+            -webkit-appearance: none;
+            appearance: none;
+            outline: none;
+        }
+        .control-group input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #60a5fa, #2563eb);
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+        }
+        .control-group input[type=range]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #60a5fa, #2563eb);
+            cursor: pointer;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+        }
+        .value-display {
+            color: #60a5fa;
+            font-weight: bold;
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-size: 13px;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .control-group select {
+            width: 100%;
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: #0a1a2a;
+            color: #e2e8f0;
+            border: 1px solid #1a3a5a;
+            margin-top: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .control-group select:focus {
+            border-color: #60a5fa;
+        }
+        .control-group select option {
+            background: #0a1a2a;
+        }
+
+        /* ===== 数据面板 ===== */
+        #data-box {
+            margin-top: 14px;
+            padding: 12px 14px;
+            background: rgba(96, 165, 250, 0.06);
+            border-radius: 8px;
+            border: 1px solid rgba(96, 165, 250, 0.08);
+            font-size: 13px;
+            line-height: 2.0;
+            color: #94a3b8;
+            font-family: 'Courier New', monospace;
+        }
+        #data-box .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+        }
+        #data-box .label {
+            color: #94a3b8;
+            font-size: 13px;
+        }
+        #data-box .label .sym {
+            color: #60a5fa;
+            font-style: italic;
+        }
+        #data-box .value {
+            color: #60a5fa;
+            font-weight: bold;
+            font-size: 15px;
+        }
+        #data-box .value.green {
+            color: #34d399;
+        }
+        #data-box .value.orange {
+            color: #f97316;
+        }
+        #data-box .value.gold {
+            color: #fbbf24;
+        }
+
+        /* 条纹位置列表 */
+        #fringe-list {
+            margin-top: 10px;
+            padding: 10px 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.8;
+        }
+        #fringe-list::-webkit-scrollbar {
+            width: 3px;
+        }
+        #fringe-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #fringe-list::-webkit-scrollbar-thumb {
+            background: rgba(96, 165, 250, 0.3);
+            border-radius: 2px;
+        }
+        #fringe-list .fringe-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        #fringe-list .fringe-row.bright {
+            color: #fbbf24;
+        }
+        #fringe-list .fringe-row.dark {
+            color: #f472b6;
+        }
+        #fringe-list .fringe-row .pos {
+            font-family: 'JetBrains Mono', monospace;
+            color: #94a3b8;
+        }
+        #fringe-list .fringe-row .label {
+            font-weight: bold;
+            min-width: 40px;
+        }
+        #fringe-list .fringe-row.bright .label {
+            color: #fbbf24;
+        }
+        #fringe-list .fringe-row.dark .label {
+            color: #f472b6;
+        }
+        #fringe-list .title-row {
+            color: #64748b;
+            font-size: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 4px;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.12);
+            font-size: 11px;
+            letter-spacing: 1px;
+            pointer-events: none;
+            z-index: 50;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 5px 18px;
+            border-radius: 20px;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            transition: opacity 2s;
+            white-space: nowrap;
+        }
+
+        #loading {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #080816;
+            color: #60a5fa;
+            font-size: 16px;
+            z-index: 999;
+            transition: opacity 0.8s ease;
+            gap: 20px;
+        }
+        #loading .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid rgba(96, 165, 250, 0.15);
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: spin 0.8s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        #loading .text {
+            opacity: 0.7;
+            letter-spacing: 2px;
+        }
+
+        @media (max-width: 640px) {
+            #ui-panel {
+                top: 10px;
+                right: 10px;
+                width: 250px;
+                padding: 14px;
+                max-height: 85vh;
+            }
+            #ui-panel.collapsed {
+                width: 44px;
+                padding: 10px 12px;
+            }
+            .control-group {
+                margin-bottom: 8px;
+            }
+            .control-group label {
+                font-size: 10px;
+            }
+            #data-box {
+                font-size: 11px;
+                padding: 8px 10px;
+            }
+            #data-box .value {
+                font-size: 13px;
+            }
+            #fringe-list {
+                font-size: 10px;
+                max-height: 100px;
+                padding: 6px 8px;
+            }
+            .panel-header h2 {
+                font-size: 13px;
+            }
+            #hint {
+                display: none;
+            }
+        }
+        @media (max-width: 400px) {
+            #ui-panel {
+                width: 200px;
+                padding: 10px;
+                right: 6px;
+                top: 6px;
+            }
+            #ui-panel.collapsed {
+                width: 38px;
+                padding: 8px 10px;
+            }
+            .value-display {
+                font-size: 10px;
+                min-width: 40px;
+            }
+            #fringe-list {
+                font-size: 9px;
+                max-height: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div class="text">加载波动光学引擎...</div>
+    </div>
+
+    <div id="hint">🖱 拖拽旋转 · 滚轮缩放 · 调节参数观察干涉变化</div>
+
+    <div id="ui-panel">
+        <div class="panel-header">
+            <h2><span class="icon">⚡</span> 双缝干涉 · 教学演示</h2>
+            <button class="panel-toggle" id="togglePanel" title="折叠/展开">
+                <span>▾</span>
+            </button>
+        </div>
+
+        <div class="panel-content">
+            <!-- 参数控制 -->
+            <div class="control-group">
+                <label><span class="sym">λ</span> 波长 <span class="value-display" id="val-lambda">550 nm</span></label>
+                <input type="range" id="sl-lambda" min="380" max="780" value="550" step="10">
+            </div>
+            <div class="control-group">
+                <label><span class="sym">d</span> 缝间距 <span class="value-display" id="val-d">0.30 mm</span></label>
+                <input type="range" id="sl-d" min="0.05" max="0.80" value="0.30" step="0.01">
+            </div>
+            <div class="control-group">
+                <label><span class="sym">D</span> 屏距 <span class="value-display" id="val-L">2.0 m</span></label>
+                <input type="range" id="sl-L" min="0.5" max="5.0" value="2.0" step="0.1">
+            </div>
+            <div class="control-group">
+                <label>显示模式</label>
+                <select id="sel-mode">
+                    <option value="linear">🌈 标准干涉条纹</option>
+                    <option value="log" selected>🔆 对数增强（暗纹可见）</option>
+                    <option value="vivid">✨ 高饱和绚丽</option>
+                    <option value="thermal">🔥 热力图模式</option>
+                    <option value="phase">🌀 相位分布（波面）</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>屏幕亮度 <span class="value-display" id="val-bright">100%</span></label>
+                <input type="range" id="sl-bright" min="30" max="200" value="100" step="5">
+            </div>
+
+            <!-- 数据面板 -->
+            <div id="data-box">
+                <div class="row">
+                    <span class="label"><span class="sym">Δx</span> 条纹间距</span>
+                    <span class="value green" id="disp-fringe">--</span>
+                </div>
+                <div class="row">
+                    <span class="label">可见明纹数</span>
+                    <span class="value gold" id="disp-order">--</span>
+                </div>
+
+                <!-- 条纹位置列表 -->
+                <div id="fringe-list">
+                    <div class="title-row">
+                        <span>条纹</span>
+                        <span>位置 y (mm)</span>
+                    </div>
+                    <!-- 由 JavaScript 动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Three.js ============ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js">
+    </script>
+
+    <script>
+        // ================================================================
+        //  1. 状态
+        // ================================================================
+        var state = {
+            lambdaNm: 550,
+            dMm: 0.30,
+            Lm: 2.0,
+            mode: 'log',
+            brightness: 100
+        };
+
+        // ================================================================
+        //  2. 波长 → RGB
+        // ================================================================
+        function wavelengthToRGB(nm) {
+            var r, g, b;
+            if (nm >= 380 && nm < 440) { r = -(nm - 440) / 60;
+                g = 0;
+                b = 1; } else if (nm >= 440 && nm < 490) { r = 0;
+                g = (nm - 440) / 50;
+                b = 1; } else if (nm >= 490 && nm < 510) { r = 0;
+                g = 1;
+                b = -(nm - 510) / 20; } else if (nm >= 510 && nm < 580) { r = (nm - 510) / 70;
+                g = 1;
+                b = 0; } else if (nm >= 580 && nm < 645) { r = 1;
+                g = -(nm - 645) / 65;
+                b = 0; } else if (nm >= 645 && nm <= 780) { r = 1;
+                g = 0;
+                b = 0; } else { r = 0;
+                g = 0;
+                b = 0; }
+            var factor;
+            if (nm >= 380 && nm < 420) factor = 0.3 + 0.7 * (nm - 380) / 40;
+            else if (nm >= 420 && nm <= 700) factor = 1.0;
+            else if (nm > 700 && nm <= 780) factor = 0.3 + 0.7 * (780 - nm) / 80;
+            else factor = 0;
+            return new THREE.Color(r * factor, g * factor, b * factor);
+        }
+
+        // ================================================================
+        //  3. Three.js 场景
+        // ================================================================
+        var scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x080816);
+
+        var camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.01, 100);
+        camera.position.set(1.5, 1.0, 5.5);
+
+        var renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        var controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.target.set(0, 0, 1.2);
+        controls.minDistance = 1.8;
+        controls.maxDistance = 15;
+
+        // ================================================================
+        //  4. 光源
+        // ================================================================
+        var sourceGroup = new THREE.Group();
+        scene.add(sourceGroup);
+
+        var sourceMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        var sourceGeo = new THREE.SphereGeometry(0.045, 24, 24);
+        var sourceMesh = new THREE.Mesh(sourceGeo, sourceMat);
+        sourceMesh.position.set(0, 0, -0.7);
+        sourceGroup.add(sourceMesh);
+
+        var glowMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.2 });
+        var glowGeo = new THREE.SphereGeometry(0.15, 16, 16);
+        var glowMesh = new THREE.Mesh(glowGeo, glowMat);
+        glowMesh.position.copy(sourceMesh.position);
+        sourceGroup.add(glowMesh);
+
+        // ================================================================
+        //  5. 双缝挡板（无数字标注）
+        // ================================================================
+        var barrierGroup = new THREE.Group();
+        scene.add(barrierGroup);
+
+        function createBarrier(dMm) {
+            barrierGroup.clear();
+            var d = dMm * 1e-3;
+            var slitWidth = d * 0.08;
+            var barHeight = 0.55;
+            var barDepth = 0.02;
+            var totalWidth = 0.7;
+
+            var mat = new THREE.MeshStandardMaterial({
+                color: 0x1a2a4a,
+                metalness: 0.85,
+                roughness: 0.3,
+                transparent: true,
+                opacity: 0.8,
+                emissive: 0x0a1a3a,
+                emissiveIntensity: 0.15
+            });
+
+            var leftW = totalWidth / 2 - d / 2 - slitWidth / 2;
+            if (leftW > 0.001) {
+                var lg = new THREE.BoxGeometry(leftW, barHeight, barDepth);
+                var lm = new THREE.Mesh(lg, mat);
+                lm.position.x = -(d / 2 + slitWidth / 2 + leftW / 2);
+                barrierGroup.add(lm);
+            }
+            var rightW = totalWidth / 2 - d / 2 - slitWidth / 2;
+            if (rightW > 0.001) {
+                var rg = new THREE.BoxGeometry(rightW, barHeight, barDepth);
+                var rm = new THREE.Mesh(rg, mat);
+                rm.position.x = (d / 2 + slitWidth / 2 + rightW / 2);
+                barrierGroup.add(rm);
+            }
+
+            // 缝发光
+            var edgeMat = new THREE.MeshBasicMaterial({
+                color: 0x60a5fa,
+                transparent: true,
+                opacity: 0.4,
+                side: THREE.DoubleSide
+            });
+            if (d > 0.01) {
+                var eg1 = new THREE.PlaneGeometry(0.004, barHeight * 0.7);
+                var em1 = new THREE.Mesh(eg1, edgeMat);
+                em1.position.set(-d / 2, 0, 0);
+                barrierGroup.add(em1);
+                var eg2 = new THREE.PlaneGeometry(0.004, barHeight * 0.7);
+                var em2 = new THREE.Mesh(eg2, edgeMat);
+                em2.position.set(d / 2, 0, 0);
+                barrierGroup.add(em2);
+            }
+        }
+
+        // ================================================================
+        //  6. 光路辅助线
+        // ================================================================
+        var rayGroup = new THREE.Group();
+        scene.add(rayGroup);
+
+        function updateRays(time) {
+            rayGroup.clear();
+            var d = state.dMm * 1e-3;
+            var L = Math.min(state.Lm, 4.5);
+            var numRays = 20;
+
+            for (var i = 0; i < numRays; i++) {
+                var t = (i / (numRays - 1)) - 0.5;
+                var startX = d / 2 * t * 1.2;
+                var startY = 0.08 * t * 1.5;
+                var endX = startX * (1 - L / 5.5) + 0.02 * t;
+                var endY = startY * (1 - L / 5.5) + 0.02;
+
+                var pts = [];
+                var steps = 30;
+                for (var j = 0; j <= steps; j++) {
+                    var progress = j / steps;
+                    var px = startX + (endX - startX) * progress + 0.01 * Math.sin(progress * Math.PI * 4 + time * 0.6);
+                    var py = startY + (endY - startY) * progress + 0.005 * Math.cos(progress * Math.PI * 3 + time * 0.5);
+                    var pz = progress * L;
+                    pts.push(new THREE.Vector3(px, py, pz));
+                }
+
+                var geo = new THREE.BufferGeometry().setFromPoints(pts);
+                var alpha = 0.02 + 0.035 * (1 - Math.abs(t));
+                var mat = new THREE.LineBasicMaterial({
+                    color: 0x60a5fa,
+                    transparent: true,
+                    opacity: alpha
+                });
+                var line = new THREE.Line(geo, mat);
+                rayGroup.add(line);
+            }
+        }
+
+        // ================================================================
+        //  7. 观察屏
+        // ================================================================
+        var screenCanvas = document.createElement('canvas');
+        screenCanvas.width = 1024;
+        screenCanvas.height = 1024;
+        var screenCtx = screenCanvas.getContext('2d');
+        var screenTexture = new THREE.CanvasTexture(screenCanvas);
+        screenTexture.minFilter = THREE.LinearFilter;
+        screenTexture.magFilter = THREE.LinearFilter;
+
+        var screenGeo = new THREE.PlaneGeometry(1.5, 0.95);
+        var screenMat = new THREE.MeshBasicMaterial({
+            map: screenTexture,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.95
+        });
+        var screenMesh = new THREE.Mesh(screenGeo, screenMat);
+        scene.add(screenMesh);
+
+        // ================================================================
+        //  8. 屏幕上的明纹/暗纹标记（仅标记点，无数字）
+        // ================================================================
+        var markerGroup = new THREE.Group();
+        scene.add(markerGroup);
+
+        // 存储所有条纹位置信息，用于UI显示
+        var fringePositions = [];
+
+        function updateMarkers() {
+            // 清除旧标记
+            while (markerGroup.children.length > 0) {
+                markerGroup.remove(markerGroup.children[0]);
+            }
+            fringePositions = [];
+
+            var lambda = state.lambdaNm * 1e-9;
+            var d = state.dMm * 1e-3;
+            var L = Math.min(state.Lm, 4.5);
+            if (d < 1e-6 || lambda < 1e-9) return;
+
+            var fringeSpacing = lambda * L / d;
+            var screenPhysH = 0.95;
+            var yMax = screenPhysH / 2;
+            var maxOrder = Math.floor(yMax / fringeSpacing);
+
+            // 标记明纹（亮纹）和暗纹
+            for (var n = -maxOrder; n <= maxOrder; n++) {
+                var yPos = n * fringeSpacing;
+                if (Math.abs(yPos) > yMax * 0.92) continue;
+
+                var isBright = (n % 2 === 0);
+                var color = isBright ? 0xffd700 : 0xf472b6;
+                var size = isBright ? 0.015 : 0.010;
+                var opacity = isBright ? 0.85 : 0.5;
+
+                // 主标记点
+                var marker = new THREE.Mesh(
+                    new THREE.CircleGeometry(size, 20),
+                    new THREE.MeshBasicMaterial({
+                        color: color,
+                        transparent: true,
+                        opacity: opacity,
+                        side: THREE.DoubleSide
+                    })
+                );
+                marker.position.set(0, yPos, 0.003);
+                markerGroup.add(marker);
+
+                // 暗纹用空心圆
+                if (!isBright) {
+                    var ring = new THREE.Mesh(
+                        new THREE.RingGeometry(size * 0.6, size, 20),
+                        new THREE.MeshBasicMaterial({
+                            color: color,
+                            transparent: true,
+                            opacity: 0.6,
+                            side: THREE.DoubleSide
+                        })
+                    );
+                    ring.position.set(0, yPos, 0.003);
+                    markerGroup.add(ring);
+                }
+
+                // 存储位置信息用于UI（不生成3D数字标签）
+                fringePositions.push({
+                    order: n,
+                    y: yPos,
+                    y_mm: yPos * 1000,
+                    isBright: isBright,
+                    label: isBright ? '明纹' : '暗纹'
+                });
+            }
+
+            // 按顺序排序
+            fringePositions.sort(function(a, b) { return a.order - b.order; });
+
+            // 更新UI列表
+            updateFringeList();
+        }
+
+        // ================================================================
+        //  9. 更新UI条纹列表
+        // ================================================================
+        function updateFringeList() {
+            var container = document.getElementById('fringe-list');
+            if (!container) return;
+
+            var html = '';
+            html += '<div class="title-row"><span>条纹</span><span>位置 y (mm)</span></div>';
+
+            // 显示所有可见条纹
+            var visible = fringePositions.filter(function(f) {
+                return Math.abs(f.order) <= 8 && Math.abs(f.y_mm) < 50;
+            });
+
+            for (var i = 0; i < visible.length; i++) {
+                var f = visible[i];
+                var cls = f.isBright ? 'bright' : 'dark';
+                var label = f.isBright ? '明纹 ' + f.order : '暗纹 ' + f.order;
+                if (f.order === 0) label = '中央明纹';
+                html += '<div class="fringe-row ' + cls + '">';
+                html += '<span class="label">' + label + '</span>';
+                html += '<span class="pos">' + f.y_mm.toFixed(2) + ' mm</span>';
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        // ================================================================
+        //  10. 干涉图样计算
+        // ================================================================
+        function updateInterferencePattern() {
+            var lambda = state.lambdaNm * 1e-9;
+            var d = state.dMm * 1e-3;
+            var L = state.Lm;
+            var w = screenCanvas.width;
+            var h = screenCanvas.height;
+            var screenPhysW = 1.5;
+            var screenPhysH = 0.95;
+            var yMax = screenPhysH / 2;
+
+            var imgData = screenCtx.createImageData(w, h);
+            var data = imgData.data;
+            var baseColor = wavelengthToRGB(state.lambdaNm);
+            var brightness = state.brightness / 100;
+
+            var pi = Math.PI;
+            var factor1 = pi * d / (lambda * L);
+            var a = d * 0.08;
+
+            for (var py = 0; py < h; py++) {
+                var y = yMax - (py / h) * screenPhysH;
+                var phase = factor1 * y;
+                var intensity = Math.cos(phase) ** 2;
+
+                var beta = pi * a * y / (lambda * L);
+                var envelope = beta === 0 ? 1 : (Math.sin(beta) / beta) ** 2;
+                intensity *= envelope;
+
+                if (state.mode === 'phase') {
+                    var phaseVal = ((phase % (2 * pi)) + 2 * pi) % (2 * pi) / (2 * pi);
+                    var hc = new THREE.Color().setHSL(phaseVal, 0.9, 0.5);
+                    var r2 = hc.r * brightness * 255;
+                    var g2 = hc.g * brightness * 255;
+                    var b2 = hc.b * brightness * 255;
+                    for (var px2 = 0; px2 < w; px2++) {
+                        var idx2 = (py * w + px2) * 4;
+                        data[idx2] = r2;
+                        data[idx2 + 1] = g2;
+                        data[idx2 + 2] = b2;
+                        data[idx2 + 3] = 255;
+                    }
+                    continue;
+                }
+
+                var displayIntensity = intensity;
+                switch (state.mode) {
+                    case 'log':
+                        displayIntensity = Math.log1p(intensity * 120) / Math.log1p(120);
+                        break;
+                    case 'vivid':
+                        displayIntensity = Math.pow(intensity, 0.55);
+                        break;
+                    case 'thermal':
+                        var t = Math.pow(intensity, 0.7);
+                        var r3 = Math.min(1, t * 1.5);
+                        var b3 = Math.max(0, 1 - t * 1.2);
+                        var g3 = Math.min(1, t * 0.8);
+                        var rv = Math.round(r3 * 255 * brightness);
+                        var gv = Math.round(g3 * 255 * brightness);
+                        var bv = Math.round(b3 * 255 * brightness);
+                        for (var px3 = 0; px3 < w; px3++) {
+                            var idx3 = (py * w + px3) * 4;
+                            data[idx3] = rv;
+                            data[idx3 + 1] = gv;
+                            data[idx3 + 2] = bv;
+                            data[idx3 + 3] = 255;
+                        }
+                        continue;
+                    default:
+                        displayIntensity = intensity;
+                }
+
+                var r = Math.round(baseColor.r * displayIntensity * 255 * brightness);
+                var g = Math.round(baseColor.g * displayIntensity * 255 * brightness);
+                var b = Math.round(baseColor.b * displayIntensity * 255 * brightness);
+
+                for (var px = 0; px < w; px++) {
+                    var idx = (py * w + px) * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = 255;
+                }
+            }
+
+            screenCtx.putImageData(imgData, 0, 0);
+            screenTexture.needsUpdate = true;
+
+            // 更新数据面板
+            var theorySpacing = (lambda * L / d) * 1000;
+            var elFringe = document.getElementById('disp-fringe');
+            var elOrder = document.getElementById('disp-order');
+
+            if (elFringe) {
+                elFringe.textContent = theorySpacing.toFixed(3) + ' mm';
+                if (theorySpacing > 20) {
+                    elFringe.style.color = '#f97316';
+                } else if (theorySpacing > 5) {
+                    elFringe.style.color = '#60a5fa';
+                } else {
+                    elFringe.style.color = '#34d399';
+                }
+            }
+
+            if (elOrder) {
+                var screenPhysH2 = 0.95;
+                var maxOrder2 = Math.floor(screenPhysH2 / 2 / (theorySpacing / 1000));
+                elOrder.textContent = (maxOrder2 * 2 + 1) + ' 条 (' + '±' + maxOrder2 + '级)';
+            }
+        }
+
+        // ================================================================
+        //  11. 布局更新
+        // ================================================================
+        function updateLayout() {
+            createBarrier(state.dMm);
+            var visualL = Math.min(state.Lm, 4.5);
+            screenMesh.position.set(0, 0, visualL);
+
+            var c = wavelengthToRGB(state.lambdaNm);
+            sourceMat.color.copy(c);
+            glowMat.color.copy(c);
+
+            updateInterferencePattern();
+            updateMarkers();
+
+            document.getElementById('val-lambda').textContent = state.lambdaNm + ' nm';
+            document.getElementById('val-d').textContent = state.dMm.toFixed(2) + ' mm';
+            document.getElementById('val-L').textContent = state.Lm.toFixed(1) + ' m';
+            document.getElementById('val-bright').textContent = state.brightness + '%';
+        }
+
+        // ================================================================
+        //  12. UI 绑定
+        // ================================================================
+        function bindUI() {
+            var slLambda = document.getElementById('sl-lambda');
+            var slD = document.getElementById('sl-d');
+            var slL = document.getElementById('sl-L');
+            var selMode = document.getElementById('sel-mode');
+            var slBright = document.getElementById('sl-bright');
+
+            var update = function() {
+                state.lambdaNm = +slLambda.value;
+                state.dMm = +slD.value;
+                state.Lm = +slL.value;
+                state.mode = selMode.value;
+                state.brightness = +slBright.value;
+                updateLayout();
+            };
+
+            slLambda.addEventListener('input', update);
+            slD.addEventListener('input', update);
+            slL.addEventListener('input', update);
+            selMode.addEventListener('change', update);
+            slBright.addEventListener('input', update);
+
+            update();
+        }
+
+        // ================================================================
+        //  13. 折叠面板
+        // ================================================================
+        function initPanel() {
+            var panel = document.getElementById('ui-panel');
+            var toggle = document.getElementById('togglePanel');
+            var isCollapsed = false;
+
+            toggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                isCollapsed = !isCollapsed;
+                panel.classList.toggle('collapsed', isCollapsed);
+            });
+
+            panel.addEventListener('click', function(e) {
+                if (isCollapsed && e.target === panel) {
+                    isCollapsed = false;
+                    panel.classList.remove('collapsed');
+                }
+            });
+        }
+
+        // ================================================================
+        //  14. 背景粒子
+        // ================================================================
+        var particleCount = 800;
+        var particlePos = new Float32Array(particleCount * 3);
+        for (var i = 0; i < particleCount; i++) {
+            particlePos[i * 3] = (Math.random() - 0.5) * 24;
+            particlePos[i * 3 + 1] = (Math.random() - 0.5) * 14;
+            particlePos[i * 3 + 2] = (Math.random() - 0.5) * 24 - 3;
+        }
+        var pGeo = new THREE.BufferGeometry();
+        pGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+        var pMat = new THREE.PointsMaterial({
+            color: 0x60a5fa,
+            transparent: true,
+            opacity: 0.12,
+            size: 0.012,
+            blending: THREE.AdditiveBlending,
+            sizeAttenuation: true
+        });
+        var particles = new THREE.Points(pGeo, pMat);
+        scene.add(particles);
+
+        // ================================================================
+        //  15. 灯光
+        // ================================================================
+        var ambient = new THREE.AmbientLight(0x1a2a5a, 0.5);
+        scene.add(ambient);
+        var dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(2, 3, 2);
+        scene.add(dirLight);
+
+        // ================================================================
+        //  16. 动画循环
+        // ================================================================
+        var clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            var time = clock.getElapsedTime();
+
+            var pos = particles.geometry.attributes.position.array;
+            for (var i = 0; i < particleCount; i++) {
+                var idx = i * 3;
+                pos[idx + 1] += Math.sin(time * 0.012 + i * 0.05) * 0.00006;
+                pos[idx] += Math.cos(time * 0.01 + i * 0.04) * 0.00005;
+                if (pos[idx] > 12) pos[idx] = -12;
+                if (pos[idx] < -12) pos[idx] = 12;
+                if (pos[idx + 1] > 7) pos[idx + 1] = -7;
+                if (pos[idx + 1] < -7) pos[idx + 1] = 7;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+
+            var breathe = 0.7 + 0.3 * Math.sin(time * 1.8);
+            glowMat.opacity = 0.1 + 0.2 * breathe;
+            glowMesh.scale.setScalar(1 + 0.2 * Math.sin(time * 1.5));
+
+            updateRays(time);
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // ================================================================
+        //  17. 响应式
+        // ================================================================
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ================================================================
+        //  18. 启动
+        // ================================================================
+        bindUI();
+        initPanel();
+        animate();
+
+        var loadingEl = document.getElementById('loading');
+        setTimeout(function() {
+            loadingEl.style.opacity = '0';
+            setTimeout(function() { loadingEl.remove(); }, 500);
+        }, 600);
+
+        setTimeout(function() {
+            var hint = document.getElementById('hint');
+            if (hint) hint.style.opacity = '0';
+        }, 6000);
+
+        console.log('⚡ 杨氏双缝干涉 - 3D 物理教学演示已启动！');
+        console.log('📐 拖动屏幕旋转 · 滚轮缩放 · 调节参数观察干涉变化');
+        console.log('💡 屏幕上仅显示明纹（金色）和暗纹（粉色）标记点，坐标在右侧面板查看');
+    </script>
+</body>
+</html>
