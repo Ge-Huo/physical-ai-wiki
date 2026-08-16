@@ -2,13 +2,18 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
+    <!-- 针对苹果设备的全屏与安全区域适配 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>体感迷宫 · 全屏版</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>体感迷宫 · 自适应全屏版</title>
     <style>
-        /* ===== 全局重置 ===== */
+        /* --- 全局重置，适配刘海屏与底部黑条 --- */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
-            width: 100%; height: 100%;
+            width: 100%;
+            height: 100%;
+            height: 100dvh; /* 动态视口高度，解决苹果顶部/底部栏遮挡 */
             overflow: hidden;
             background: #0a0a1a;
             font-family: 'Segoe UI', -apple-system, sans-serif;
@@ -18,54 +23,21 @@
             position: fixed;
             top: 0; left: 0;
         }
-        #game-container { width: 100vw; height: 100vh; display: block; }
-
-        /* ===== 加载状态遮罩 ===== */
-        #loading-overlay {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: #0a0a1a;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 30;
-            color: #4fc3f7;
-            font-size: 18px;
-            transition: opacity 0.8s ease;
-            pointer-events: none;
-        }
-        #loading-overlay.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        #loading-overlay .spinner {
-            width: 48px; height: 48px;
-            border: 4px solid rgba(79,195,247,0.15);
-            border-top-color: #4fc3f7;
-            border-radius: 50%;
-            animation: spin 0.8s cubic-bezier(0.6,0,0.4,1) infinite;
-            margin-bottom: 16px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        #loading-overlay .text { opacity: 0.7; letter-spacing: 1px; }
-        #loading-overlay .error {
-            color: #ff5252;
-            font-size: 15px;
-            margin-top: 12px;
-            padding: 0 20px;
-            text-align: center;
-            line-height: 1.5;
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            display: block;
         }
 
-        /* ===== UI 覆盖层 ===== */
+        /* --- UI 覆盖层，考虑安全区域 --- */
         #ui-overlay {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
             pointer-events: none;
             z-index: 10;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
         #top-bar {
             display: flex;
@@ -74,7 +46,7 @@
             padding: 12px 18px;
             background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
             color: #fff;
-            font-size: 14px;
+            font-size: clamp(12px, 3vw, 16px); /* 响应式字体 */
             pointer-events: auto;
             flex-wrap: wrap;
             gap: 6px;
@@ -86,10 +58,10 @@
             font-weight: 500;
             text-shadow: 0 2px 8px rgba(0,0,0,0.5);
         }
-        #top-bar .stat .icon { font-size: 18px; }
+        #top-bar .stat .icon { font-size: clamp(14px, 4vw, 20px); }
         #top-bar .stat .val {
             font-weight: 700;
-            font-size: 16px;
+            font-size: clamp(14px, 4vw, 18px);
             min-width: 30px;
         }
         #top-bar .stat .val.gold { color: #ffd740; }
@@ -98,7 +70,7 @@
 
         #bottom-hint {
             position: absolute;
-            bottom: 30px;
+            bottom: max(20px, env(safe-area-inset-bottom));
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0,0,0,0.6);
@@ -107,26 +79,25 @@
             padding: 10px 22px;
             border-radius: 30px;
             color: rgba(255,255,255,0.7);
-            font-size: 13px;
+            font-size: clamp(10px, 2.5vw, 14px);
             letter-spacing: 0.5px;
             border: 1px solid rgba(255,255,255,0.06);
             pointer-events: none;
             white-space: nowrap;
-            transition: opacity 0.6s;
         }
         #bottom-hint .highlight { color: #ffd740; font-weight: 600; }
         #bottom-hint .danger { color: #ff5252; font-weight: 600; }
 
         #fullscreen-btn {
             position: absolute;
-            top: 60px;
-            right: 20px;
+            top: max(12px, env(safe-area-inset-top));
+            right: max(12px, env(safe-area-inset-right));
             background: rgba(255,255,255,0.1);
             border: 1px solid rgba(255,255,255,0.2);
             border-radius: 30px;
             color: #fff;
             padding: 6px 14px;
-            font-size: 14px;
+            font-size: clamp(12px, 2.5vw, 16px);
             cursor: pointer;
             pointer-events: auto;
             z-index: 25;
@@ -135,6 +106,7 @@
         }
         #fullscreen-btn:active { transform: scale(0.95); }
 
+        /* 模态框 */
         #modal {
             position: absolute;
             top: 0; left: 0;
@@ -162,13 +134,13 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.6);
         }
         #modal .card .emoji { font-size: 56px; margin-bottom: 8px; }
-        #modal .card h2 { color: #fff; font-size: 22px; font-weight: 600; margin-bottom: 8px; }
-        #modal .card p { color: rgba(255,255,255,0.6); font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+        #modal .card h2 { color: #fff; font-size: clamp(18px, 5vw, 24px); font-weight: 600; margin-bottom: 8px; }
+        #modal .card p { color: rgba(255,255,255,0.6); font-size: clamp(12px, 3vw, 15px); line-height: 1.6; margin-bottom: 20px; }
         #modal .card .btn {
             background: linear-gradient(135deg, #4fc3f7, #2196f3);
             border: none;
             color: #fff;
-            font-size: 16px;
+            font-size: clamp(14px, 3.5vw, 18px);
             font-weight: 600;
             padding: 14px 40px;
             border-radius: 50px;
@@ -221,31 +193,41 @@
         }
         #calibrate-tip.hidden { opacity: 0; pointer-events: none; }
         #calibrate-tip .icon { font-size: 40px; display: block; margin-bottom: 8px; }
-        #calibrate-tip .title { font-size: 16px; font-weight: 600; }
-        #calibrate-tip .desc { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+        #calibrate-tip .title { font-size: clamp(14px, 4vw, 18px); font-weight: 600; }
+        #calibrate-tip .desc { font-size: clamp(12px, 3vw, 14px); color: rgba(255,255,255,0.6); margin-top: 4px; }
 
-        @media (max-width: 480px) {
-            #top-bar { padding: 10px 14px; font-size: 12px; }
-            #top-bar .stat .val { font-size: 14px; }
-            #modal .card { padding: 28px 20px 24px; }
-            #modal .card .emoji { font-size: 44px; }
-            #modal .card h2 { font-size: 19px; }
-            #bottom-hint { font-size: 11px; padding: 8px 16px; bottom: 20px; }
-            #fullscreen-btn { top: 50px; right: 10px; font-size: 12px; padding: 4px 12px; }
+        /* 加载遮罩 */
+        #loading-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #0a0a1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            color: #4fc3f7;
+            font-size: clamp(14px, 4vw, 20px);
+            transition: opacity 0.8s ease;
+            pointer-events: none;
         }
-        @media (orientation: landscape) and (max-height: 500px) {
-            #bottom-hint { bottom: 12px; font-size: 10px; padding: 5px 14px; }
-            #top-bar { padding: 6px 14px; font-size: 11px; }
-            #modal .card { padding: 20px 16px 18px; }
-            #modal .card .emoji { font-size: 32px; }
-            #modal .card h2 { font-size: 16px; }
-            #fullscreen-btn { top: 40px; right: 10px; font-size: 11px; padding: 3px 10px; }
+        #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        #loading-overlay .spinner {
+            width: 48px; height: 48px;
+            border: 4px solid rgba(79,195,247,0.15);
+            border-top-color: #4fc3f7;
+            border-radius: 50%;
+            animation: spin 0.8s cubic-bezier(0.6,0,0.4,1) infinite;
+            margin-bottom: 16px;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading-overlay .error { color: #ff5252; font-size: clamp(12px, 3vw, 15px); margin-top: 12px; padding: 0 20px; text-align: center; }
     </style>
 </head>
 <body>
 
-    <!-- ===== 加载状态遮罩 ===== -->
+    <!-- 加载遮罩 -->
     <div id="loading-overlay">
         <div class="spinner"></div>
         <div class="text" id="loading-text">加载波动引擎...</div>
@@ -255,15 +237,14 @@
     <div id="game-container"></div>
 
     <div id="ui-overlay">
-        <!-- 顶部状态栏 -->
         <div id="top-bar">
             <div class="stat">
                 <span class="icon">⏱</span>
-                <span class="val danger" id="timer-display">60</span><span style="font-size:11px;color:rgba(255,255,255,0.4);">s</span>
+                <span class="val danger" id="timer-display">60</span><span style="font-size:11px;">s</span>
             </div>
             <div class="stat">
                 <span class="icon">👣</span>
-                <span class="val gold" id="steps-display">0</span><span style="font-size:11px;color:rgba(255,255,255,0.4);">/300</span>
+                <span class="val gold" id="steps-display">0</span><span style="font-size:11px;">/300</span>
             </div>
             <div class="stat">
                 <span class="icon">🏁</span>
@@ -271,28 +252,24 @@
             </div>
         </div>
 
-        <!-- 全屏按钮 -->
         <button id="fullscreen-btn">⛶ 全屏</button>
 
-        <!-- 校准提示 -->
         <div id="calibrate-tip" class="hidden">
             <span class="icon">📱</span>
             <div class="title">校准中...</div>
             <div class="desc">请将手机平放，保持静止 1 秒</div>
         </div>
 
-        <!-- 底部提示 -->
         <div id="bottom-hint">
-            🎯 倾斜手机控制 · <span class="danger">60秒</span> 内到达终点 · 步数 ≤ <span class="highlight">300</span>
+            🎯 倾斜手机 · <span class="danger">60秒</span> 内到达 · 步数 ≤ <span class="highlight">300</span>
         </div>
 
-        <!-- 模态框 -->
         <div id="modal">
-            <div class="card" id="modal-card">
+            <div class="card">
                 <div class="emoji" id="modal-emoji">🧭</div>
-                <h2 id="modal-title">体感迷宫 · 全屏版</h2>
+                <h2 id="modal-title">体感迷宫 · 自适应</h2>
                 <p id="modal-desc">
-                    薄墙 · 宽视野 · 全屏沉浸<br>
+                    自动适配屏幕大小 · 沉浸全屏<br>
                     ⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 步数 ≤ <span style="color:#ffd740;">300</span>
                 </p>
                 <div id="modal-stats" style="display:none;">
@@ -320,21 +297,17 @@
 
     <script>
         // ================================================================
-        //  0. 加载状态管理
+        //  0. 加载状态
         // ================================================================
         var loadingOverlay = document.getElementById('loading-overlay');
         var loadingText = document.getElementById('loading-text');
         var loadingError = document.getElementById('loading-error');
 
-        function showLoading(msg) {
-            loadingText.textContent = msg || '加载波动引擎...';
+        function showLoading(msg) { loadingText.textContent = msg || '加载波动引擎...';
             loadingOverlay.classList.remove('hidden');
-            loadingError.style.display = 'none';
-        }
+            loadingError.style.display = 'none'; }
 
-        function hideLoading() {
-            loadingOverlay.classList.add('hidden');
-        }
+        function hideLoading() { loadingOverlay.classList.add('hidden'); }
 
         function showError(msg) {
             loadingError.textContent = msg || '加载失败，请刷新重试';
@@ -342,39 +315,49 @@
             loadingText.textContent = '⚠️ 出错了';
         }
 
-        // 检查 Three.js 是否加载成功
         var loadTimer = setTimeout(function() {
-            if (typeof THREE === 'undefined') {
-                showError('Three.js 库加载超时，请检查网络连接');
-            }
+            if (typeof THREE === 'undefined') showError('Three.js 库加载超时，请检查网络连接');
         }, 8000);
 
         // ================================================================
         //  1. 迷宫数据 (13x13)
         // ================================================================
         var MAZE = [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,0,0,0,1,0,0,0,0,0,1,0,1],
-            [1,0,1,0,1,0,1,1,1,0,1,0,1],
-            [1,0,1,0,0,0,0,0,1,0,0,0,1],
-            [1,0,1,1,1,1,1,0,1,1,1,0,1],
-            [1,0,0,0,0,0,1,0,0,0,1,0,1],
-            [1,1,1,1,1,0,1,1,1,0,1,0,1],
-            [1,0,0,0,1,0,0,0,1,0,0,0,1],
-            [1,0,1,1,1,1,1,0,1,1,1,0,1],
-            [1,0,0,0,0,0,0,0,0,0,1,0,1],
-            [1,1,1,0,1,1,1,1,1,0,1,0,1],
-            [1,0,0,0,1,0,0,0,0,0,0,0,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1]
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+            [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1],
+            [1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+            [1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         ];
-
-        var ROWS = MAZE.length;
-        var COLS = MAZE[0].length;
+        var ROWS = MAZE.length,
+            COLS = MAZE[0].length;
         var START = { r: 1, c: 1 };
         var END = { r: 11, c: 11 };
 
         // ================================================================
-        //  2. 游戏状态 (手机优化参数)
+        //  2. 动态尺寸计算 (核心自适应逻辑)
+        // ================================================================
+        function calcUnit() {
+            // 留出边距，防止墙壁贴边
+            var margin = 1.1; // 额外放大系数，让迷宫占满屏幕但留一点边缘
+            var w = window.innerWidth;
+            var h = window.innerHeight;
+            // 单位 = (屏幕尺寸 / 网格数) * 系数，取较小值保证完整显示
+            var unit = Math.min(w / COLS, h / ROWS) * 0.85;
+            // 限制最小单位，防止小屏上球太小
+            return Math.max(unit, 8);
+        }
+
+        // ================================================================
+        //  3. 游戏状态 (所有物理尺寸动态计算)
         // ================================================================
         var game = {
             running: false,
@@ -387,40 +370,62 @@
             elapsed: 0,
             ballPos: { x: START.c + 0.5, z: START.r + 0.5 },
             velocity: { x: 0, z: 0 },
-            maxSpeed: 3.0,
-            acceleration: 9.0,
+            // 物理参数 (会在 init 中根据 UNIT 赋值)
+            maxSpeed: 0,
+            acceleration: 0,
             friction: 0.90,
             bounce: 0.40,
-            ballRadius: 0.25,
+            ballRadius: 0,
+            wallThick: 0,
+            wallHeight: 0,
             tiltX: 0,
             tiltZ: 0,
             calibrated: false,
             calibBeta: 0,
             calibGamma: 0,
             timerInterval: null,
+            UNIT: 1,
         };
 
         // ================================================================
-        //  3. Three.js 场景
+        //  4. Three.js 场景 (正交相机，完美适配)
         // ================================================================
-        // 等待 Three.js 加载完成
         if (typeof THREE === 'undefined') {
             showError('Three.js 库未加载，请检查网络');
         } else {
             clearTimeout(loadTimer);
             hideLoading();
-            initScene();
+            initApp();
         }
 
-        function initScene() {
+        function initApp() {
+            // 计算动态单位
+            var UNIT = calcUnit();
+            game.UNIT = UNIT;
+
+            // 根据 UNIT 设置物理尺寸
+            game.ballRadius = UNIT * 0.22;
+            game.wallThick = UNIT * 0.28;
+            game.wallHeight = UNIT * 0.9;
+            game.maxSpeed = UNIT * 4.5;
+            game.acceleration = UNIT * 14;
+
             var container = document.getElementById('game-container');
             var scene = new THREE.Scene();
             scene.background = new THREE.Color(0x0a0a1a);
-            scene.fog = new THREE.Fog(0x0a0a1a, 20, 35);
+            scene.fog = new THREE.Fog(0x0a0a1a, UNIT * 25, UNIT * 40);
 
-            var camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 50);
-            camera.position.set(7.5, 10, 10);
-            camera.lookAt(6.5, 0, 6.5);
+            // ---- 正交相机 (保证迷宫在任何屏幕上都完美适配) ----
+            var aspect = window.innerWidth / window.innerHeight;
+            var viewSize = Math.max(ROWS, COLS) * UNIT * 0.6;
+            var camera = new THREE.OrthographicCamera(
+                -viewSize * aspect, viewSize * aspect,
+                viewSize, -viewSize,
+                0.1, UNIT * 100
+            );
+            camera.position.set(COLS / 2 * UNIT, ROWS / 2 * UNIT, UNIT * 20);
+            camera.lookAt(COLS / 2 * UNIT, 0, ROWS / 2 * UNIT);
+            camera.up.set(0, 1, 0);
 
             var renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -431,43 +436,57 @@
             renderer.toneMappingExposure = 1.2;
             container.appendChild(renderer.domElement);
 
+            // ---- 控制器 (允许用户旋转视角) ----
             var controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.08;
-            controls.target.set(6.5, 0.5, 6.5);
-            controls.minDistance = 4;
-            controls.maxDistance = 22;
-            controls.maxPolarAngle = Math.PI / 2.1;
-            controls.minPolarAngle = Math.PI / 6;
+            controls.target.set(COLS / 2 * UNIT, 0, ROWS / 2 * UNIT);
+            controls.minDistance = UNIT * 5;
+            controls.maxDistance = UNIT * 40;
             controls.update();
 
             // ---- 灯光 ----
-            var ambientLight = new THREE.AmbientLight(0x334466, 0.6);
-            scene.add(ambientLight);
+            var ambient = new THREE.AmbientLight(0x334466, 0.6);
+            scene.add(ambient);
             var dirLight = new THREE.DirectionalLight(0xffeedd, 1.6);
-            dirLight.position.set(10, 18, 6);
+            dirLight.position.set(UNIT * 15, UNIT * 20, UNIT * 10);
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 2048;
             dirLight.shadow.mapSize.height = 2048;
             dirLight.shadow.camera.near = 0.1;
-            dirLight.shadow.camera.far = 40;
-            dirLight.shadow.camera.left = -20;
-            dirLight.shadow.camera.right = 20;
-            dirLight.shadow.camera.top = 20;
-            dirLight.shadow.camera.bottom = -20;
+            dirLight.shadow.camera.far = UNIT * 50;
+            dirLight.shadow.camera.left = -UNIT * 20;
+            dirLight.shadow.camera.right = UNIT * 20;
+            dirLight.shadow.camera.top = UNIT * 20;
+            dirLight.shadow.camera.bottom = -UNIT * 20;
             scene.add(dirLight);
             var fillLight = new THREE.DirectionalLight(0x4488ff, 0.4);
-            fillLight.position.set(-6, 4, -10);
+            fillLight.position.set(-UNIT * 10, UNIT * 5, -UNIT * 15);
             scene.add(fillLight);
             var hemiLight = new THREE.HemisphereLight(0x4488ff, 0x002244, 0.5);
             scene.add(hemiLight);
 
-            // ---- 迷宫墙壁 (薄墙) ----
+            // ---- 迷宫地板 ----
+            var floorMat = new THREE.MeshStandardMaterial({
+                color: 0x111a2a,
+                roughness: 0.7,
+                metalness: 0.1,
+            });
+            var floorGeo = new THREE.PlaneGeometry(COLS * UNIT, ROWS * UNIT);
+            var floorMesh = new THREE.Mesh(floorGeo, floorMat);
+            floorMesh.rotation.x = -Math.PI / 2;
+            floorMesh.position.set(COLS / 2 * UNIT, -0.01, ROWS / 2 * UNIT);
+            floorMesh.receiveShadow = true;
+            scene.add(floorMesh);
+
+            // 网格辅助
+            var gridHelper = new THREE.GridHelper(Math.max(COLS, ROWS) * UNIT, Math.max(COLS, ROWS), 0x1a2a4a, 0x0a1a2a);
+            gridHelper.position.set(COLS / 2 * UNIT, 0, ROWS / 2 * UNIT);
+            scene.add(gridHelper);
+
+            // ---- 迷宫墙壁 (动态厚度) ----
             var wallGroup = new THREE.Group();
             scene.add(wallGroup);
-            var WALL_HEIGHT = 0.9;
-            var WALL_THICK = 0.3;
-
             var wallMat = new THREE.MeshStandardMaterial({
                 color: 0x4a6a8a,
                 roughness: 0.4,
@@ -483,72 +502,54 @@
                 emissiveIntensity: 0.03,
             });
 
-            var floorMat = new THREE.MeshStandardMaterial({
-                color: 0x111a2a,
-                roughness: 0.7,
-                metalness: 0.1,
-            });
-            var floorGeo = new THREE.PlaneGeometry(COLS, ROWS);
-            var floorMesh = new THREE.Mesh(floorGeo, floorMat);
-            floorMesh.rotation.x = -Math.PI / 2;
-            floorMesh.position.set(COLS / 2, -0.01, ROWS / 2);
-            floorMesh.receiveShadow = true;
-            scene.add(floorMesh);
-
-            var gridHelper = new THREE.GridHelper(Math.max(COLS, ROWS), Math.max(COLS, ROWS), 0x1a2a4a, 0x0a1a2a);
-            gridHelper.position.set(COLS / 2, 0, ROWS / 2);
-            scene.add(gridHelper);
-
-            function buildMaze() {
-                for (var r = 0; r < ROWS; r++) {
-                    for (var c = 0; c < COLS; c++) {
-                        if (MAZE[r][c] === 1) {
-                            var x = c + 0.5;
-                            var z = r + 0.5;
-                            var geo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, WALL_THICK);
-                            var mesh = new THREE.Mesh(geo, wallMat);
-                            mesh.position.set(x, WALL_HEIGHT / 2, z);
-                            mesh.castShadow = true;
-                            mesh.receiveShadow = true;
-                            wallGroup.add(mesh);
-                            var topGeo = new THREE.BoxGeometry(WALL_THICK + 0.02, 0.04, WALL_THICK + 0.02);
-                            var topMesh = new THREE.Mesh(topGeo, wallMatTop);
-                            topMesh.position.set(x, WALL_HEIGHT + 0.02, z);
-                            wallGroup.add(topMesh);
-                        }
+            for (var r = 0; r < ROWS; r++) {
+                for (var c = 0; c < COLS; c++) {
+                    if (MAZE[r][c] === 1) {
+                        var x = c * UNIT + UNIT / 2;
+                        var z = r * UNIT + UNIT / 2;
+                        var geo = new THREE.BoxGeometry(game.wallThick, game.wallHeight, game.wallThick);
+                        var mesh = new THREE.Mesh(geo, wallMat);
+                        mesh.position.set(x, game.wallHeight / 2, z);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        wallGroup.add(mesh);
+                        var topGeo = new THREE.BoxGeometry(game.wallThick + 0.02 * UNIT, 0.04 * UNIT, game.wallThick +
+                            0.02 * UNIT);
+                        var topMesh = new THREE.Mesh(topGeo, wallMatTop);
+                        topMesh.position.set(x, game.wallHeight + 0.02 * UNIT, z);
+                        wallGroup.add(topMesh);
                     }
                 }
             }
-            buildMaze();
 
-            // ---- 起点 ----
+            // ---- 起点标记 ----
             var startMat = new THREE.MeshBasicMaterial({ color: 0x00e676, transparent: true, opacity: 0.4, side: THREE
                     .DoubleSide });
-            var startRing = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.5, 32), startMat);
+            var startRing = new THREE.Mesh(new THREE.RingGeometry(0.2 * UNIT, 0.5 * UNIT, 32), startMat);
             startRing.rotation.x = -Math.PI / 2;
-            startRing.position.set(START.c + 0.5, 0.02, START.r + 0.5);
+            startRing.position.set(START.c * UNIT + UNIT / 2, 0.02 * UNIT, START.r * UNIT + UNIT / 2);
             scene.add(startRing);
             var startGlow = new THREE.Mesh(
-                new THREE.CircleGeometry(0.4, 16),
+                new THREE.CircleGeometry(0.4 * UNIT, 16),
                 new THREE.MeshBasicMaterial({ color: 0x00e676, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
             );
             startGlow.rotation.x = -Math.PI / 2;
-            startGlow.position.set(START.c + 0.5, 0.01, START.r + 0.5);
+            startGlow.position.set(START.c * UNIT + UNIT / 2, 0.01 * UNIT, START.r * UNIT + UNIT / 2);
             scene.add(startGlow);
 
-            // ---- 终点 ----
+            // ---- 终点标记 ----
             var endMat = new THREE.MeshBasicMaterial({ color: 0xff1744, transparent: true, opacity: 0.5, side: THREE
                     .DoubleSide });
-            var endRing = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.5, 32), endMat);
+            var endRing = new THREE.Mesh(new THREE.RingGeometry(0.2 * UNIT, 0.5 * UNIT, 32), endMat);
             endRing.rotation.x = -Math.PI / 2;
-            endRing.position.set(END.c + 0.5, 0.02, END.r + 0.5);
+            endRing.position.set(END.c * UNIT + UNIT / 2, 0.02 * UNIT, END.r * UNIT + UNIT / 2);
             scene.add(endRing);
             var endGlow = new THREE.Mesh(
-                new THREE.CircleGeometry(0.45, 16),
+                new THREE.CircleGeometry(0.45 * UNIT, 16),
                 new THREE.MeshBasicMaterial({ color: 0xff1744, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
             );
             endGlow.rotation.x = -Math.PI / 2;
-            endGlow.position.set(END.c + 0.5, 0.01, END.r + 0.5);
+            endGlow.position.set(END.c * UNIT + UNIT / 2, 0.01 * UNIT, END.r * UNIT + UNIT / 2);
             scene.add(endGlow);
             var pillarMat2 = new THREE.MeshBasicMaterial({
                 color: 0xff1744,
@@ -556,8 +557,8 @@
                 opacity: 0.06,
                 side: THREE.DoubleSide,
             });
-            var pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.15, 2.5, 8), pillarMat2);
-            pillar.position.set(END.c + 0.5, 1.25, END.r + 0.5);
+            var pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.03 * UNIT, 0.15 * UNIT, 2.5 * UNIT, 8), pillarMat2);
+            pillar.position.set(END.c * UNIT + UNIT / 2, 1.25 * UNIT, END.r * UNIT + UNIT / 2);
             scene.add(pillar);
 
             // ---- 小球 ----
@@ -574,7 +575,7 @@
             var ball = new THREE.Mesh(ballGeo, ballMat);
             ball.castShadow = true;
             ball.receiveShadow = true;
-            ball.position.set(START.c + 0.5, game.ballRadius, START.r + 0.5);
+            ball.position.set(START.c * UNIT + UNIT / 2, game.ballRadius, START.r * UNIT + UNIT / 2);
             scene.add(ball);
 
             var glowMat2 = new THREE.MeshBasicMaterial({
@@ -588,21 +589,21 @@
             scene.add(glowMesh);
 
             // ================================================================
-            //  4. 物理碰撞 (适配薄墙)
+            //  5. 物理碰撞 (适配动态尺寸)
             // ================================================================
             function checkCollision(x, z, radius) {
-                if (x - radius < 0 || x + radius > COLS || z - radius < 0 || z + radius > ROWS) return true;
-                var col = Math.floor(x);
-                var row = Math.floor(z);
-                var halfWall = WALL_THICK / 2;
+                if (x - radius < 0 || x + radius > COLS * UNIT || z - radius < 0 || z + radius > ROWS * UNIT) return true;
+                var halfWall = game.wallThick / 2;
+                var col = Math.floor(x / UNIT);
+                var row = Math.floor(z / UNIT);
                 for (var dr = -1; dr <= 1; dr++) {
                     for (var dc = -1; dc <= 1; dc++) {
                         var r = row + dr;
                         var c = col + dc;
                         if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
                         if (MAZE[r][c] === 1) {
-                            var wx = c + 0.5;
-                            var wz = r + 0.5;
+                            var wx = c * UNIT + UNIT / 2;
+                            var wz = r * UNIT + UNIT / 2;
                             var dx = x - wx;
                             var dz = z - wz;
                             var dist = Math.sqrt(dx * dx + dz * dz);
@@ -617,17 +618,17 @@
             function resolveCollision(x, z, radius) {
                 var newX = x,
                     newZ = z;
-                var col = Math.floor(x);
-                var row = Math.floor(z);
-                var halfWall = WALL_THICK / 2;
+                var halfWall = game.wallThick / 2;
+                var col = Math.floor(x / UNIT);
+                var row = Math.floor(z / UNIT);
                 for (var dr = -1; dr <= 1; dr++) {
                     for (var dc = -1; dc <= 1; dc++) {
                         var r = row + dr;
                         var c = col + dc;
                         if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
                         if (MAZE[r][c] === 1) {
-                            var wx = c + 0.5;
-                            var wz = r + 0.5;
+                            var wx = c * UNIT + UNIT / 2;
+                            var wz = r * UNIT + UNIT / 2;
                             var dx = x - wx;
                             var dz = z - wz;
                             var dist = Math.sqrt(dx * dx + dz * dz);
@@ -642,13 +643,13 @@
                         }
                     }
                 }
-                newX = Math.max(radius, Math.min(COLS - radius, newX));
-                newZ = Math.max(radius, Math.min(ROWS - radius, newZ));
+                newX = Math.max(radius, Math.min(COLS * UNIT - radius, newX));
+                newZ = Math.max(radius, Math.min(ROWS * UNIT - radius, newZ));
                 return { x: newX, z: newZ };
             }
 
             // ================================================================
-            //  5. 物理更新
+            //  6. 物理更新
             // ================================================================
             function updatePhysics(dt) {
                 if (!game.running || game.finished || game.failed) return;
@@ -666,8 +667,8 @@
                     game.velocity.x = (game.velocity.x / speed) * game.maxSpeed;
                     game.velocity.z = (game.velocity.z / speed) * game.maxSpeed;
                 }
-                if (Math.abs(game.velocity.x) < 0.001) game.velocity.x = 0;
-                if (Math.abs(game.velocity.z) < 0.001) game.velocity.z = 0;
+                if (Math.abs(game.velocity.x) < 0.01) game.velocity.x = 0;
+                if (Math.abs(game.velocity.z) < 0.01) game.velocity.z = 0;
 
                 var newX = game.ballPos.x + game.velocity.x * dt;
                 var newZ = game.ballPos.z + game.velocity.z * dt;
@@ -707,23 +708,17 @@
                 if (moveDist > 0.01) {
                     game.steps++;
                     document.getElementById('steps-display').textContent = game.steps;
-                    if (game.steps > game.maxSteps) {
-                        failGame('步数超限 ( > ' + game.maxSteps + ' )');
-                        return;
-                    }
+                    if (game.steps > game.maxSteps) { failGame('步数超限 ( > ' + game.maxSteps + ' )'); return; }
                 }
 
-                var dx = game.ballPos.x - (END.c + 0.5);
-                var dz = game.ballPos.z - (END.r + 0.5);
-                if (dx * dx + dz * dz < 0.3 * 0.3) {
-                    winGame();
-                    return;
-                }
+                var dx = game.ballPos.x - (END.c * UNIT + UNIT / 2);
+                var dz = game.ballPos.z - (END.r * UNIT + UNIT / 2);
+                if (dx * dx + dz * dz < (0.3 * UNIT) * (0.3 * UNIT)) { winGame(); return; }
 
                 var totalDist = Math.sqrt((END.c - START.c) ** 2 + (END.r - START.r) ** 2);
                 var currentDist = Math.sqrt(
-                    (game.ballPos.x - (START.c + 0.5)) ** 2 +
-                    (game.ballPos.z - (START.r + 0.5)) ** 2
+                    ((game.ballPos.x - (START.c * UNIT + UNIT / 2)) / UNIT) ** 2 +
+                    ((game.ballPos.z - (START.r * UNIT + UNIT / 2)) / UNIT) ** 2
                 );
                 var progress = Math.min(100, (currentDist / totalDist) * 100);
                 if (progress > 95) progress = 95;
@@ -731,27 +726,23 @@
             }
 
             // ================================================================
-            //  6. 胜利/失败
+            //  7. 胜利/失败/粒子 (同前，适配 UNIT)
             // ================================================================
             function winGame() {
                 if (game.finished || game.failed) return;
                 game.finished = true;
                 game.running = false;
-                if (game.timerInterval) {
-                    clearInterval(game.timerInterval);
-                    game.timerInterval = null;
-                }
+                if (game.timerInterval) { clearInterval(game.timerInterval);
+                    game.timerInterval = null; }
                 game.elapsed = (Date.now() - game.startTime) / 1000;
-
                 document.getElementById('modal-emoji').textContent = '🎉';
                 document.getElementById('modal-title').textContent = '🏆 通关成功！';
-                document.getElementById('modal-desc').textContent = '你成功走出了困难迷宫！';
+                document.getElementById('modal-desc').textContent = '你成功走出了迷宫！';
                 document.getElementById('final-time').textContent = Math.round(game.elapsed);
                 document.getElementById('final-steps').textContent = game.steps;
                 document.getElementById('modal-stats').style.display = 'block';
                 document.getElementById('modal-btn').textContent = '🔄 再来一局';
                 document.getElementById('modal').classList.remove('hidden');
-
                 ballMat.emissiveIntensity = 0.8;
                 ballMat.color.setHex(0xffd740);
                 createWinParticles();
@@ -762,10 +753,8 @@
                 if (game.finished || game.failed) return;
                 game.failed = true;
                 game.running = false;
-                if (game.timerInterval) {
-                    clearInterval(game.timerInterval);
-                    game.timerInterval = null;
-                }
+                if (game.timerInterval) { clearInterval(game.timerInterval);
+                    game.timerInterval = null; }
                 document.getElementById('modal-emoji').textContent = '😵';
                 document.getElementById('modal-title').textContent = '挑战失败';
                 document.getElementById('modal-desc').textContent = reason || '再试一次吧！';
@@ -779,7 +768,7 @@
                 var count = 80;
                 var colors = [0xff1744, 0xffd740, 0x4fc3f7, 0x00e676, 0xff6d00];
                 for (var i = 0; i < count; i++) {
-                    var size = 0.03 + Math.random() * 0.08;
+                    var size = (0.03 + Math.random() * 0.08) * UNIT;
                     var geo = new THREE.SphereGeometry(size, 6, 6);
                     var mat = new THREE.MeshBasicMaterial({
                         color: colors[Math.floor(Math.random() * colors.length)],
@@ -788,13 +777,13 @@
                     });
                     var p = new THREE.Mesh(geo, mat);
                     p.position.copy(ball.position);
-                    p.position.y += 0.3;
+                    p.position.y += 0.3 * UNIT;
                     var theta = Math.random() * Math.PI * 2;
                     var phi = Math.random() * Math.PI * 0.8 + 0.1;
-                    var speed = 1 + Math.random() * 2;
+                    var speed = (1 + Math.random() * 2) * UNIT;
                     p.userData = {
                         vx: Math.cos(theta) * Math.sin(phi) * speed,
-                        vy: Math.cos(phi) * speed + 1,
+                        vy: Math.cos(phi) * speed + 1 * UNIT,
                         vz: Math.sin(theta) * Math.sin(phi) * speed,
                         life: 1.0,
                         decay: 0.6 + Math.random() * 0.6,
@@ -803,20 +792,19 @@
                     winParticles.push(p);
                 }
             }
-
             var winParticles = [];
 
             function updateWinParticles(dt) {
                 for (var i = winParticles.length - 1; i >= 0; i--) {
                     var p = winParticles[i];
-                    p.userData.vy -= 3.0 * dt;
+                    p.userData.vy -= 3.0 * UNIT * dt;
                     p.position.x += p.userData.vx * dt;
                     p.position.y += p.userData.vy * dt;
                     p.position.z += p.userData.vz * dt;
                     p.userData.life -= p.userData.decay * dt;
                     p.material.opacity = Math.max(0, p.userData.life);
                     p.scale.setScalar(p.userData.life);
-                    if (p.userData.life <= 0 || p.position.y < -1) {
+                    if (p.userData.life <= 0 || p.position.y < -1 * UNIT) {
                         scene.remove(p);
                         winParticles.splice(i, 1);
                     }
@@ -824,27 +812,20 @@
             }
 
             // ================================================================
-            //  7. 计时器
+            //  8. 计时器 / 传感器 / 键盘 (同前，略作适配)
             // ================================================================
             function startTimer() {
                 var remaining = game.timeLimit;
                 document.getElementById('timer-display').textContent = remaining;
                 if (game.timerInterval) clearInterval(game.timerInterval);
                 game.timerInterval = setInterval(function() {
-                    if (!game.running || game.finished || game.failed) {
-                        return;
-                    }
+                    if (!game.running || game.finished || game.failed) return;
                     remaining--;
                     document.getElementById('timer-display').textContent = remaining;
-                    if (remaining <= 0) {
-                        failGame('时间到 ( > ' + game.timeLimit + 's )');
-                    }
+                    if (remaining <= 0) { failGame('时间到 ( > ' + game.timeLimit + 's )'); }
                 }, 1000);
             }
 
-            // ================================================================
-            //  8. 传感器控制 (iOS 权限请求)
-            // ================================================================
             var sensorActive = false;
 
             function initSensor() {
@@ -853,7 +834,6 @@
                         '⌨️ 键盘 WASD / 方向键 控制 · 60秒内到达终点 · 步数≤300';
                     return;
                 }
-
                 if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                     DeviceOrientationEvent.requestPermission()
                         .then(function(state) {
@@ -901,16 +881,11 @@
             function showCalibrateTip() {
                 var tip = document.getElementById('calibrate-tip');
                 tip.classList.remove('hidden');
-                setTimeout(function() {
-                    if (game.calibrated) tip.classList.add('hidden');
-                }, 2000);
+                setTimeout(function() { if (game.calibrated) tip.classList.add('hidden'); }, 2000);
             }
 
-            // ================================================================
-            //  9. 键盘控制 (备选)
-            // ================================================================
+            // 键盘
             var keys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
-
             document.addEventListener('keydown', function(e) {
                 var key = e.key.toLowerCase();
                 if (key === 'w') keys.w = true;
@@ -957,7 +932,7 @@
             }
 
             // ================================================================
-            //  10. UI 控制
+            //  9. UI 控制
             // ================================================================
             var modal = document.getElementById('modal');
             var modalBtn = document.getElementById('modal-btn');
@@ -968,24 +943,20 @@
                 game.failed = false;
                 game.steps = 0;
                 game.elapsed = 0;
-                game.ballPos.x = START.c + 0.5;
-                game.ballPos.z = START.r + 0.5;
+                game.ballPos.x = START.c * UNIT + UNIT / 2;
+                game.ballPos.z = START.r * UNIT + UNIT / 2;
                 game.velocity.x = 0;
                 game.velocity.z = 0;
                 game.tiltX = 0;
                 game.tiltZ = 0;
-                if (game.timerInterval) {
-                    clearInterval(game.timerInterval);
-                    game.timerInterval = null;
-                }
+                if (game.timerInterval) { clearInterval(game.timerInterval);
+                    game.timerInterval = null; }
                 ball.position.set(game.ballPos.x, game.ballRadius, game.ballPos.z);
                 ball.rotation.set(0, 0, 0);
                 ballMat.emissiveIntensity = 0.05;
                 ballMat.color.setHex(0x4fc3f7);
                 glowMesh.position.copy(ball.position);
-                for (var i = winParticles.length - 1; i >= 0; i--) {
-                    scene.remove(winParticles[i]);
-                }
+                for (var i = winParticles.length - 1; i >= 0; i--) { scene.remove(winParticles[i]); }
                 winParticles.length = 0;
                 document.getElementById('steps-display').textContent = '0';
                 document.getElementById('timer-display').textContent = game.timeLimit;
@@ -996,9 +967,9 @@
                 game.calibrated = false;
                 if (sensorActive) showCalibrateTip();
                 document.getElementById('modal-emoji').textContent = '🧭';
-                document.getElementById('modal-title').textContent = '体感迷宫 · 全屏版';
+                document.getElementById('modal-title').textContent = '体感迷宫 · 自适应';
                 document.getElementById('modal-desc').innerHTML =
-                    '薄墙 · 宽视野 · 全屏沉浸<br>⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 步数 ≤ <span style="color:#ffd740;">300</span>';
+                    '自动适配屏幕大小 · 沉浸全屏<br>⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 步数 ≤ <span style="color:#ffd740;">300</span>';
                 modalBtn.textContent = '🎮 开始挑战';
                 modal.classList.remove('hidden');
             }
@@ -1019,7 +990,7 @@
                 }
             }
 
-            // 处理 iOS 权限 (在用户点击时重新请求)
+            // iOS 权限处理
             var originalStartGame = startGame;
             startGame = function() {
                 if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission ===
@@ -1036,9 +1007,7 @@
                                 originalStartGame();
                             }
                         })
-                        .catch(function() {
-                            originalStartGame();
-                        });
+                        .catch(function() { originalStartGame(); });
                 } else {
                     originalStartGame();
                 }
@@ -1054,39 +1023,46 @@
             });
 
             // ================================================================
-            //  11. 全屏功能
+            //  10. 全屏功能 (兼容苹果)
             // ================================================================
             var fullscreenBtn = document.getElementById('fullscreen-btn');
             fullscreenBtn.addEventListener('click', function() {
                 var elem = document.documentElement;
-                if (!document.fullscreenElement) {
-                    if (elem.requestFullscreen) {
-                        elem.requestFullscreen().catch(function(err) {});
-                    } else if (elem.webkitRequestFullscreen) {
-                        elem.webkitRequestFullscreen();
-                    }
+                if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                    if (elem.requestFullscreen) { elem.requestFullscreen().catch(function() {}); } else if (elem
+                        .webkitRequestFullscreen) { elem.webkitRequestFullscreen(); }
                 } else {
-                    if (document.exitFullscreen) {
-                        document.exitFullscreen();
-                    } else if (document.webkitExitFullscreen) {
-                        document.webkitExitFullscreen();
-                    }
+                    if (document.exitFullscreen) { document.exitFullscreen(); } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen(); }
                 }
             });
 
             // ================================================================
-            //  12. 窗口自适应
+            //  11. 响应式 (窗口变化时重载场景)
             // ================================================================
+            var resizeTimeout;
             window.addEventListener('resize', function() {
-                var w = window.innerWidth;
-                var h = window.innerHeight;
-                camera.aspect = w / h;
-                camera.updateProjectionMatrix();
-                renderer.setSize(w, h);
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(function() {
+                    // 简单起见，刷新页面以完全重置尺寸 (对于游戏来说更干净)
+                    // 或者动态调整相机视野和物理尺寸，但为了防止复杂错误，建议刷新。
+                    // 这里采用动态调整相机和单位 (仅调整视觉，不重置状态)
+                    var newUnit = calcUnit();
+                    // 由于物理已经基于旧Unit运行，完全重置更安全。
+                    // 但对于用户体验，如果正在游戏，提示或简单重置。
+                    if (game.running) {
+                        // 如果游戏进行中，简单重置
+                        resetGame();
+                        // 由于场景重建复杂，这里直接刷新页面以重置全部尺寸
+                        location.reload();
+                    } else {
+                        location.reload();
+                    }
+                }, 300);
             });
 
             // ================================================================
-            //  13. 主循环
+            //  12. 主循环
             // ================================================================
             var lastTime = 0;
 
@@ -1094,14 +1070,8 @@
                 var dt = Math.min((time - lastTime) / 1000, 0.05);
                 lastTime = time;
 
-                if (!sensorActive || !game.calibrated) {
-                    updateKeyboard();
-                }
-
-                if (game.running) {
-                    updatePhysics(dt);
-                }
-
+                if (!sensorActive || !game.calibrated) { updateKeyboard(); }
+                if (game.running) { updatePhysics(dt); }
                 updateWinParticles(dt);
 
                 var pulse = 0.6 + 0.4 * Math.sin(time / 500);
@@ -1118,15 +1088,14 @@
             }
 
             // ================================================================
-            //  14. 启动
+            //  13. 启动
             // ================================================================
             resetGame();
             initSensor();
             animate(0);
-
-            console.log('🧭 体感迷宫 · 全屏薄墙版已加载！');
-            console.log('📱 点击"全屏"按钮进入沉浸模式');
-            console.log('📐 墙壁厚度 0.3，球半径 0.25，视野开阔');
+            console.log('🧭 体感迷宫 · 自适应全屏版已加载！');
+            console.log('📐 当前单位尺寸:', UNIT);
+            console.log('📱 点击"全屏"按钮沉浸体验');
         }
     </script>
 </body>
