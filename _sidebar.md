@@ -20,6 +20,7 @@
   - [手机口袋实验演示](exp-animation/README.md)
     - [加速度实验](exp-animation/accelerometer-experiment-with-mobile-phones.md)
     - [迷宫实验](exp-animation/migong.md)
+    - [3D照片](exp-animation/3d-photo.md)
 
 - **核心技术**
   - [物理信息神经网络 PINNs](core-tech/pinns.md)
