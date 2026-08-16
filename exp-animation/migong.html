@@ -2,18 +2,22 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
-    <!-- 针对苹果设备的全屏与安全区域适配 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>体感迷宫 · 自适应全屏版</title>
+    <title>步行迷宫 · 体感驱动</title>
     <style>
-        /* --- 全局重置，适配刘海屏与底部黑条 --- */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body {
+        /* ===== 全局重置 ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html,
+        body {
             width: 100%;
             height: 100%;
-            height: 100dvh; /* 动态视口高度，解决苹果顶部/底部栏遮挡 */
+            height: 100dvh;
             overflow: hidden;
             background: #0a0a1a;
             font-family: 'Segoe UI', -apple-system, sans-serif;
@@ -21,7 +25,8 @@
             user-select: none;
             -webkit-user-select: none;
             position: fixed;
-            top: 0; left: 0;
+            top: 0;
+            left: 0;
         }
         #game-container {
             width: 100vw;
@@ -30,23 +35,27 @@
             display: block;
         }
 
-        /* --- UI 覆盖层，考虑安全区域 --- */
+        /* ===== UI 覆盖层 ===== */
         #ui-overlay {
             position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             pointer-events: none;
             z-index: 10;
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
+
+        /* ---- 顶部状态栏 ---- */
         #top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 12px 18px;
-            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
             color: #fff;
-            font-size: clamp(12px, 3vw, 16px); /* 响应式字体 */
+            font-size: clamp(11px, 2.8vw, 15px);
             pointer-events: auto;
             flex-wrap: wrap;
             gap: 6px;
@@ -54,46 +63,69 @@
         #top-bar .stat {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             font-weight: 500;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
         }
-        #top-bar .stat .icon { font-size: clamp(14px, 4vw, 20px); }
+        #top-bar .stat .icon {
+            font-size: clamp(14px, 3.5vw, 18px);
+        }
         #top-bar .stat .val {
             font-weight: 700;
-            font-size: clamp(14px, 4vw, 18px);
-            min-width: 30px;
+            font-size: clamp(13px, 3.5vw, 17px);
+            min-width: 28px;
         }
-        #top-bar .stat .val.gold { color: #ffd740; }
-        #top-bar .stat .val.danger { color: #ff5252; }
-        #top-bar .stat .val.cyan { color: #4fc3f7; }
+        #top-bar .stat .val.gold {
+            color: #ffd740;
+        }
+        #top-bar .stat .val.danger {
+            color: #ff5252;
+        }
+        #top-bar .stat .val.cyan {
+            color: #4fc3f7;
+        }
+        #top-bar .stat .val.green {
+            color: #69db7c;
+        }
 
+        /* ---- 底部提示 ---- */
         #bottom-hint {
             position: absolute;
             bottom: max(20px, env(safe-area-inset-bottom));
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.6);
+            background: rgba(0, 0, 0, 0.6);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             padding: 10px 22px;
             border-radius: 30px;
-            color: rgba(255,255,255,0.7);
+            color: rgba(255, 255, 255, 0.7);
             font-size: clamp(10px, 2.5vw, 14px);
             letter-spacing: 0.5px;
-            border: 1px solid rgba(255,255,255,0.06);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             pointer-events: none;
             white-space: nowrap;
         }
-        #bottom-hint .highlight { color: #ffd740; font-weight: 600; }
-        #bottom-hint .danger { color: #ff5252; font-weight: 600; }
+        #bottom-hint .highlight {
+            color: #ffd740;
+            font-weight: 600;
+        }
+        #bottom-hint .danger {
+            color: #ff5252;
+            font-weight: 600;
+        }
+        #bottom-hint .walk {
+            color: #69db7c;
+            font-weight: 600;
+        }
 
+        /* ---- 全屏按钮 ---- */
         #fullscreen-btn {
             position: absolute;
             top: max(12px, env(safe-area-inset-top));
             right: max(12px, env(safe-area-inset-right));
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 30px;
             color: #fff;
             padding: 6px 14px;
@@ -104,17 +136,21 @@
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
         }
-        #fullscreen-btn:active { transform: scale(0.95); }
+        #fullscreen-btn:active {
+            transform: scale(0.95);
+        }
 
-        /* 模态框 */
+        /* ---- 模态框 ---- */
         #modal {
             position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(10,10,26,0.85);
+            background: rgba(10, 10, 26, 0.85);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             pointer-events: auto;
@@ -122,20 +158,36 @@
             transition: opacity 0.5s ease;
             padding: 20px;
         }
-        #modal.hidden { opacity: 0; pointer-events: none; }
+        #modal.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
         #modal .card {
-            background: rgba(20,30,60,0.9);
-            border: 1px solid rgba(96,165,250,0.15);
+            background: rgba(20, 30, 60, 0.9);
+            border: 1px solid rgba(96, 165, 250, 0.15);
             border-radius: 24px;
             padding: 36px 32px 32px;
             max-width: 420px;
             width: 100%;
             text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
         }
-        #modal .card .emoji { font-size: 56px; margin-bottom: 8px; }
-        #modal .card h2 { color: #fff; font-size: clamp(18px, 5vw, 24px); font-weight: 600; margin-bottom: 8px; }
-        #modal .card p { color: rgba(255,255,255,0.6); font-size: clamp(12px, 3vw, 15px); line-height: 1.6; margin-bottom: 20px; }
+        #modal .card .emoji {
+            font-size: 56px;
+            margin-bottom: 8px;
+        }
+        #modal .card h2 {
+            color: #fff;
+            font-size: clamp(18px, 5vw, 24px);
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        #modal .card p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: clamp(12px, 3vw, 15px);
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
         #modal .card .btn {
             background: linear-gradient(135deg, #4fc3f7, #2196f3);
             border: none;
@@ -146,39 +198,51 @@
             border-radius: 50px;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 4px 20px rgba(79,195,247,0.3);
+            box-shadow: 0 4px 20px rgba(79, 195, 247, 0.3);
             pointer-events: auto;
             width: 100%;
             touch-action: manipulation;
         }
-        #modal .card .btn:active { transform: scale(0.97); }
+        #modal .card .btn:active {
+            transform: scale(0.97);
+        }
         #modal .card .stats-final {
             display: flex;
             justify-content: center;
             gap: 30px;
             margin: 16px 0 20px;
         }
-        #modal .card .stats-final .item { text-align: center; }
+        #modal .card .stats-final .item {
+            text-align: center;
+        }
         #modal .card .stats-final .item .num {
             font-size: 28px;
             font-weight: 700;
         }
-        #modal .card .stats-final .item .num.gold { color: #ffd740; }
-        #modal .card .stats-final .item .num.danger { color: #ff5252; }
-        #modal .card .stats-final .item .num.cyan { color: #4fc3f7; }
+        #modal .card .stats-final .item .num.gold {
+            color: #ffd740;
+        }
+        #modal .card .stats-final .item .num.green {
+            color: #69db7c;
+        }
+        #modal .card .stats-final .item .num.danger {
+            color: #ff5252;
+        }
         #modal .card .stats-final .item .lbl {
-            color: rgba(255,255,255,0.4);
+            color: rgba(255, 255, 255, 0.4);
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-top: 2px;
         }
+
+        /* ---- 校准提示 ---- */
         #calibrate-tip {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.75);
+            background: rgba(0, 0, 0, 0.75);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             padding: 20px 28px;
@@ -188,19 +252,35 @@
             pointer-events: none;
             z-index: 15;
             transition: opacity 0.5s;
-            border: 1px solid rgba(79,195,247,0.2);
+            border: 1px solid rgba(79, 195, 247, 0.2);
             max-width: 85%;
         }
-        #calibrate-tip.hidden { opacity: 0; pointer-events: none; }
-        #calibrate-tip .icon { font-size: 40px; display: block; margin-bottom: 8px; }
-        #calibrate-tip .title { font-size: clamp(14px, 4vw, 18px); font-weight: 600; }
-        #calibrate-tip .desc { font-size: clamp(12px, 3vw, 14px); color: rgba(255,255,255,0.6); margin-top: 4px; }
+        #calibrate-tip.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #calibrate-tip .icon {
+            font-size: 40px;
+            display: block;
+            margin-bottom: 8px;
+        }
+        #calibrate-tip .title {
+            font-size: clamp(14px, 4vw, 18px);
+            font-weight: 600;
+        }
+        #calibrate-tip .desc {
+            font-size: clamp(12px, 3vw, 14px);
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 4px;
+        }
 
-        /* 加载遮罩 */
+        /* ---- 加载遮罩 ---- */
         #loading-overlay {
             position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background: #0a0a1a;
             display: flex;
             flex-direction: column;
@@ -212,17 +292,31 @@
             transition: opacity 0.8s ease;
             pointer-events: none;
         }
-        #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        #loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
         #loading-overlay .spinner {
-            width: 48px; height: 48px;
-            border: 4px solid rgba(79,195,247,0.15);
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(79, 195, 247, 0.15);
             border-top-color: #4fc3f7;
             border-radius: 50%;
-            animation: spin 0.8s cubic-bezier(0.6,0,0.4,1) infinite;
+            animation: spin 0.8s cubic-bezier(0.6, 0, 0.4, 1) infinite;
             margin-bottom: 16px;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        #loading-overlay .error { color: #ff5252; font-size: clamp(12px, 3vw, 15px); margin-top: 12px; padding: 0 20px; text-align: center; }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        #loading-overlay .error {
+            color: #ff5252;
+            font-size: clamp(12px, 3vw, 15px);
+            margin-top: 12px;
+            padding: 0 20px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -230,21 +324,22 @@
     <!-- 加载遮罩 -->
     <div id="loading-overlay">
         <div class="spinner"></div>
-        <div class="text" id="loading-text">加载波动引擎...</div>
+        <div class="text" id="loading-text">加载体感引擎...</div>
         <div class="error" id="loading-error" style="display:none;"></div>
     </div>
 
     <div id="game-container"></div>
 
     <div id="ui-overlay">
+        <!-- 顶部状态栏 -->
         <div id="top-bar">
             <div class="stat">
                 <span class="icon">⏱</span>
                 <span class="val danger" id="timer-display">60</span><span style="font-size:11px;">s</span>
             </div>
             <div class="stat">
-                <span class="icon">👣</span>
-                <span class="val gold" id="steps-display">0</span><span style="font-size:11px;">/300</span>
+                <span class="icon">👟</span>
+                <span class="val green" id="walk-steps-display">0</span><span style="font-size:11px;">/300</span>
             </div>
             <div class="stat">
                 <span class="icon">🏁</span>
@@ -252,25 +347,29 @@
             </div>
         </div>
 
+        <!-- 全屏按钮 -->
         <button id="fullscreen-btn">⛶ 全屏</button>
 
+        <!-- 校准提示 -->
         <div id="calibrate-tip" class="hidden">
-            <span class="icon">📱</span>
-            <div class="title">校准中...</div>
-            <div class="desc">请将手机平放，保持静止 1 秒</div>
+            <span class="icon">🚶</span>
+            <div class="title">正在校准步态...</div>
+            <div class="desc">请将手机握在手中，原地踏步 5~8 步</div>
         </div>
 
+        <!-- 底部提示 -->
         <div id="bottom-hint">
-            🎯 倾斜手机 · <span class="danger">60秒</span> 内到达 · 步数 ≤ <span class="highlight">300</span>
+            🚶 走路驱动 · <span class="walk">每步</span> 冲一步 · 倾斜 <span class="highlight">转向</span>
         </div>
 
+        <!-- 模态框 -->
         <div id="modal">
-            <div class="card">
-                <div class="emoji" id="modal-emoji">🧭</div>
-                <h2 id="modal-title">体感迷宫 · 自适应</h2>
+            <div class="card" id="modal-card">
+                <div class="emoji" id="modal-emoji">🚶</div>
+                <h2 id="modal-title">步行迷宫 · 体感驱动</h2>
                 <p id="modal-desc">
-                    自动适配屏幕大小 · 沉浸全屏<br>
-                    ⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 步数 ≤ <span style="color:#ffd740;">300</span>
+                    <span style="color:#69db7c;">走路</span> 驱动小球前进 · <span style="color:#ffd740;">倾斜</span> 控制方向<br>
+                    ⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 真实步数 ≤ <span style="color:#ffd740;">300</span>
                 </p>
                 <div id="modal-stats" style="display:none;">
                     <div class="stats-final">
@@ -279,17 +378,17 @@
                             <div class="lbl">用时 (秒)</div>
                         </div>
                         <div class="item">
-                            <div class="num gold" id="final-steps">0</div>
-                            <div class="lbl">步数</div>
+                            <div class="num green" id="final-steps">0</div>
+                            <div class="lbl">真实步数</div>
                         </div>
                     </div>
                 </div>
-                <button class="btn" id="modal-btn">🎮 开始挑战</button>
+                <button class="btn" id="modal-btn">🚶 开始行走</button>
             </div>
         </div>
     </div>
 
-    <!-- ===== 传统方式加载 Three.js ===== -->
+    <!-- ===== Three.js (传统 script 加载) ===== -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
     </script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js">
@@ -303,7 +402,7 @@
         var loadingText = document.getElementById('loading-text');
         var loadingError = document.getElementById('loading-error');
 
-        function showLoading(msg) { loadingText.textContent = msg || '加载波动引擎...';
+        function showLoading(msg) { loadingText.textContent = msg || '加载体感引擎...';
             loadingOverlay.classList.remove('hidden');
             loadingError.style.display = 'none'; }
 
@@ -343,38 +442,34 @@
         var END = { r: 11, c: 11 };
 
         // ================================================================
-        //  2. 动态尺寸计算 (核心自适应逻辑)
+        //  2. 动态尺寸计算
         // ================================================================
         function calcUnit() {
-            // 留出边距，防止墙壁贴边
-            var margin = 1.1; // 额外放大系数，让迷宫占满屏幕但留一点边缘
             var w = window.innerWidth;
             var h = window.innerHeight;
-            // 单位 = (屏幕尺寸 / 网格数) * 系数，取较小值保证完整显示
             var unit = Math.min(w / COLS, h / ROWS) * 0.85;
-            // 限制最小单位，防止小屏上球太小
             return Math.max(unit, 8);
         }
 
         // ================================================================
-        //  3. 游戏状态 (所有物理尺寸动态计算)
+        //  3. 游戏状态
         // ================================================================
         var game = {
             running: false,
             finished: false,
             failed: false,
-            steps: 0,
+            steps: 0, // 真实步数 (由传感器检测)
             maxSteps: 300,
             timeLimit: 60,
             startTime: 0,
             elapsed: 0,
             ballPos: { x: START.c + 0.5, z: START.r + 0.5 },
             velocity: { x: 0, z: 0 },
-            // 物理参数 (会在 init 中根据 UNIT 赋值)
-            maxSpeed: 0,
-            acceleration: 0,
+            // 物理参数 (步数驱动模式)
+            maxSpeed: 5.0,
+            acceleration: 0, // 步数驱动不需要持续加速度
             friction: 0.90,
-            bounce: 0.40,
+            bounce: 0.35,
             ballRadius: 0,
             wallThick: 0,
             wallHeight: 0,
@@ -385,10 +480,94 @@
             calibGamma: 0,
             timerInterval: null,
             UNIT: 1,
+            // 步数脉冲参数
+            pulseStrength: 1.2,
         };
 
         // ================================================================
-        //  4. Three.js 场景 (正交相机，完美适配)
+        //  4. 步态检测模块
+        // ================================================================
+        var stepDetector = {
+            threshold: 1.6,
+            minInterval: 280,
+            bufferSize: 8,
+            history: [],
+            lastStepTime: 0,
+            stepCount: 0,
+            isWalking: false,
+            walkStartTime: 0,
+            currentAccel: 0,
+            calibMode: true,
+            calibSamples: [],
+            calibThreshold: 1.6,
+
+            detect: function(accelMagnitude) {
+                var now = Date.now();
+                this.currentAccel = accelMagnitude;
+
+                // 校准模式：收集样本
+                if (this.calibMode) {
+                    this.calibSamples.push(accelMagnitude);
+                    if (this.calibSamples.length > 100) {
+                        // 计算平均值 + 标准差作为阈值
+                        var sum = 0;
+                        for (var i = 0; i < this.calibSamples.length; i++) sum += this.calibSamples[i];
+                        var mean = sum / this.calibSamples.length;
+                        var sqSum = 0;
+                        for (var j = 0; j < this.calibSamples.length; j++) sqSum += (this.calibSamples[j] - mean) ** 2;
+                        var std = Math.sqrt(sqSum / this.calibSamples.length);
+                        // 阈值 = 均值 + 2.5 * 标准差 (走路时峰值明显)
+                        this.calibThreshold = Math.max(mean + 2.2 * std, 1.2);
+                        this.calibMode = false;
+                        this.calibSamples = [];
+                        document.getElementById('calibrate-tip').classList.add('hidden');
+                        console.log('✅ 步态校准完成，阈值:', this.calibThreshold.toFixed(2));
+                    }
+                    return false;
+                }
+
+                // 滑动窗口平滑
+                this.history.push(accelMagnitude);
+                if (this.history.length > this.bufferSize) this.history.shift();
+                var avg = 0;
+                for (var k = 0; k < this.history.length; k++) avg += this.history[k];
+                avg /= this.history.length;
+
+                // 检测条件
+                if (avg > this.calibThreshold && (now - this.lastStepTime) > this.minInterval) {
+                    this.lastStepTime = now;
+                    this.stepCount++;
+                    this.isWalking = true;
+                    this.walkStartTime = now;
+                    return true;
+                }
+
+                if (this.isWalking && (now - this.lastStepTime) > 2500) {
+                    this.isWalking = false;
+                }
+                return false;
+            },
+
+            reset: function() {
+                this.stepCount = 0;
+                this.history = [];
+                this.lastStepTime = 0;
+                this.isWalking = false;
+                this.calibMode = true;
+                this.calibSamples = [];
+                this.calibThreshold = 1.6;
+            },
+
+            getCadence: function() {
+                if (!this.isWalking) return 60;
+                var elapsed = (Date.now() - this.walkStartTime) / 1000;
+                if (elapsed < 2) return 60;
+                return (this.stepCount / elapsed) * 60;
+            }
+        };
+
+        // ================================================================
+        //  5. Three.js 场景
         // ================================================================
         if (typeof THREE === 'undefined') {
             showError('Three.js 库未加载，请检查网络');
@@ -399,23 +578,20 @@
         }
 
         function initApp() {
-            // 计算动态单位
             var UNIT = calcUnit();
             game.UNIT = UNIT;
-
-            // 根据 UNIT 设置物理尺寸
             game.ballRadius = UNIT * 0.22;
             game.wallThick = UNIT * 0.28;
             game.wallHeight = UNIT * 0.9;
-            game.maxSpeed = UNIT * 4.5;
-            game.acceleration = UNIT * 14;
+            game.maxSpeed = UNIT * 5.0;
+            game.pulseStrength = UNIT * 1.2;
 
             var container = document.getElementById('game-container');
             var scene = new THREE.Scene();
             scene.background = new THREE.Color(0x0a0a1a);
             scene.fog = new THREE.Fog(0x0a0a1a, UNIT * 25, UNIT * 40);
 
-            // ---- 正交相机 (保证迷宫在任何屏幕上都完美适配) ----
+            // 正交相机
             var aspect = window.innerWidth / window.innerHeight;
             var viewSize = Math.max(ROWS, COLS) * UNIT * 0.6;
             var camera = new THREE.OrthographicCamera(
@@ -425,7 +601,6 @@
             );
             camera.position.set(COLS / 2 * UNIT, ROWS / 2 * UNIT, UNIT * 20);
             camera.lookAt(COLS / 2 * UNIT, 0, ROWS / 2 * UNIT);
-            camera.up.set(0, 1, 0);
 
             var renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -436,7 +611,7 @@
             renderer.toneMappingExposure = 1.2;
             container.appendChild(renderer.domElement);
 
-            // ---- 控制器 (允许用户旋转视角) ----
+            // 控制器
             var controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.08;
@@ -466,7 +641,7 @@
             var hemiLight = new THREE.HemisphereLight(0x4488ff, 0x002244, 0.5);
             scene.add(hemiLight);
 
-            // ---- 迷宫地板 ----
+            // ---- 地板 ----
             var floorMat = new THREE.MeshStandardMaterial({
                 color: 0x111a2a,
                 roughness: 0.7,
@@ -479,12 +654,11 @@
             floorMesh.receiveShadow = true;
             scene.add(floorMesh);
 
-            // 网格辅助
             var gridHelper = new THREE.GridHelper(Math.max(COLS, ROWS) * UNIT, Math.max(COLS, ROWS), 0x1a2a4a, 0x0a1a2a);
             gridHelper.position.set(COLS / 2 * UNIT, 0, ROWS / 2 * UNIT);
             scene.add(gridHelper);
 
-            // ---- 迷宫墙壁 (动态厚度) ----
+            // ---- 迷宫墙壁 ----
             var wallGroup = new THREE.Group();
             scene.add(wallGroup);
             var wallMat = new THREE.MeshStandardMaterial({
@@ -589,7 +763,7 @@
             scene.add(glowMesh);
 
             // ================================================================
-            //  5. 物理碰撞 (适配动态尺寸)
+            //  6. 碰撞检测
             // ================================================================
             function checkCollision(x, z, radius) {
                 if (x - radius < 0 || x + radius > COLS * UNIT || z - radius < 0 || z + radius > ROWS * UNIT) return true;
@@ -649,19 +823,16 @@
             }
 
             // ================================================================
-            //  6. 物理更新
+            //  7. 物理更新 (步数脉冲驱动)
             // ================================================================
             function updatePhysics(dt) {
                 if (!game.running || game.finished || game.failed) return;
 
-                var accelX = game.tiltX * game.acceleration;
-                var accelZ = game.tiltZ * game.acceleration;
-
-                game.velocity.x += accelX * dt;
-                game.velocity.z += accelZ * dt;
+                // 摩擦力 (持续减速)
                 game.velocity.x *= Math.pow(game.friction, dt * 60);
                 game.velocity.z *= Math.pow(game.friction, dt * 60);
 
+                // 速度限制
                 var speed = Math.sqrt(game.velocity.x * game.velocity.x + game.velocity.z * game.velocity.z);
                 if (speed > game.maxSpeed) {
                     game.velocity.x = (game.velocity.x / speed) * game.maxSpeed;
@@ -673,6 +844,7 @@
                 var newX = game.ballPos.x + game.velocity.x * dt;
                 var newZ = game.ballPos.z + game.velocity.z * dt;
 
+                // 碰撞处理
                 if (checkCollision(newX, newZ, game.ballRadius)) {
                     var testX = game.ballPos.x + game.velocity.x * dt;
                     var testZ = game.ballPos.z;
@@ -704,17 +876,10 @@
                 ball.rotation.z -= game.velocity.x * dt * 2;
                 glowMesh.position.copy(ball.position);
 
-                var moveDist = Math.sqrt((game.velocity.x * dt) ** 2 + (game.velocity.z * dt) ** 2);
-                if (moveDist > 0.01) {
-                    game.steps++;
-                    document.getElementById('steps-display').textContent = game.steps;
-                    if (game.steps > game.maxSteps) { failGame('步数超限 ( > ' + game.maxSteps + ' )'); return; }
-                }
+                // 步数显示更新 (真实步数由传感器累加)
+                document.getElementById('walk-steps-display').textContent = game.steps;
 
-                var dx = game.ballPos.x - (END.c * UNIT + UNIT / 2);
-                var dz = game.ballPos.z - (END.r * UNIT + UNIT / 2);
-                if (dx * dx + dz * dz < (0.3 * UNIT) * (0.3 * UNIT)) { winGame(); return; }
-
+                // 进度计算
                 var totalDist = Math.sqrt((END.c - START.c) ** 2 + (END.r - START.r) ** 2);
                 var currentDist = Math.sqrt(
                     ((game.ballPos.x - (START.c * UNIT + UNIT / 2)) / UNIT) ** 2 +
@@ -723,10 +888,64 @@
                 var progress = Math.min(100, (currentDist / totalDist) * 100);
                 if (progress > 95) progress = 95;
                 document.getElementById('progress-display').textContent = Math.round(progress) + '%';
+
+                // 终点检测
+                var dx = game.ballPos.x - (END.c * UNIT + UNIT / 2);
+                var dz = game.ballPos.z - (END.r * UNIT + UNIT / 2);
+                if (dx * dx + dz * dz < (0.3 * UNIT) * (0.3 * UNIT)) {
+                    winGame();
+                }
             }
 
             // ================================================================
-            //  7. 胜利/失败/粒子 (同前，适配 UNIT)
+            //  8. 步数脉冲应用 (由传感器调用)
+            // ================================================================
+            function applyStepPulse() {
+                if (!game.running || game.finished || game.failed) return;
+
+                // 方向由倾斜角度决定
+                var dirX = game.tiltX;
+                var dirZ = game.tiltZ;
+                var len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+
+                if (len > 0.05) {
+                    dirX /= len;
+                    dirZ /= len;
+                } else {
+                    // 平放时默认向前 (Z负方向)
+                    dirX = 0;
+                    dirZ = -1;
+                }
+
+                // 步频调制脉冲强度
+                var cadence = stepDetector.getCadence();
+                var pulse = game.pulseStrength;
+                if (cadence > 100) pulse *= 1.15;
+                if (cadence > 130) pulse *= 1.25;
+
+                // 应用速度脉冲
+                game.velocity.x += dirX * pulse * 0.35;
+                game.velocity.z += dirZ * pulse * 0.35;
+
+                // 速度限制
+                var speed = Math.sqrt(game.velocity.x * game.velocity.x + game.velocity.z * game.velocity.z);
+                if (speed > game.maxSpeed) {
+                    game.velocity.x = (game.velocity.x / speed) * game.maxSpeed;
+                    game.velocity.z = (game.velocity.z / speed) * game.maxSpeed;
+                }
+
+                // 步数计数 (每走一步真实步数+1)
+                game.steps++;
+                document.getElementById('walk-steps-display').textContent = game.steps;
+
+                // 步数超限检查
+                if (game.steps > game.maxSteps) {
+                    failGame('步数超限 ( > ' + game.maxSteps + ' )');
+                }
+            }
+
+            // ================================================================
+            //  9. 胜利/失败
             // ================================================================
             function winGame() {
                 if (game.finished || game.failed) return;
@@ -737,7 +956,7 @@
                 game.elapsed = (Date.now() - game.startTime) / 1000;
                 document.getElementById('modal-emoji').textContent = '🎉';
                 document.getElementById('modal-title').textContent = '🏆 通关成功！';
-                document.getElementById('modal-desc').textContent = '你成功走出了迷宫！';
+                document.getElementById('modal-desc').textContent = '你走出了迷宫！';
                 document.getElementById('final-time').textContent = Math.round(game.elapsed);
                 document.getElementById('final-steps').textContent = game.steps;
                 document.getElementById('modal-stats').style.display = 'block';
@@ -812,7 +1031,7 @@
             }
 
             // ================================================================
-            //  8. 计时器 / 传感器 / 键盘 (同前，略作适配)
+            //  10. 计时器
             // ================================================================
             function startTimer() {
                 var remaining = game.timeLimit;
@@ -826,66 +1045,108 @@
                 }, 1000);
             }
 
+            // ================================================================
+            //  11. 传感器控制 (DeviceOrientation + DeviceMotion)
+            // ================================================================
             var sensorActive = false;
 
             function initSensor() {
+                // 检测 DeviceOrientation (倾斜控制)
                 if (typeof DeviceOrientationEvent === 'undefined') {
                     document.getElementById('bottom-hint').innerHTML =
-                        '⌨️ 键盘 WASD / 方向键 控制 · 60秒内到达终点 · 步数≤300';
+                        '⌨️ 键盘 WASD 转向 · 方向键控制 · 空格步进';
                     return;
                 }
+
+                var orientationHandler = function(e) {
+                    var beta = e.beta || 0;
+                    var gamma = e.gamma || 0;
+                    if (!game.calibrated) {
+                        game.calibBeta = beta;
+                        game.calibGamma = gamma;
+                        game.calibrated = true;
+                        document.getElementById('calibrate-tip').classList.add('hidden');
+                        return;
+                    }
+                    var tiltZ = (beta - game.calibBeta) / 30;
+                    var tiltX = (gamma - game.calibGamma) / 30;
+                    tiltZ = Math.max(-1, Math.min(1, tiltZ));
+                    tiltX = Math.max(-1, Math.min(1, tiltX));
+                    var deadZone = 0.04;
+                    if (Math.abs(tiltX) < deadZone) tiltX = 0;
+                    if (Math.abs(tiltZ) < deadZone) tiltZ = 0;
+                    game.tiltX += (tiltX - game.tiltX) * 0.15;
+                    game.tiltZ += (tiltZ - game.tiltZ) * 0.15;
+                };
+
+                // iOS 权限请求
                 if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                     DeviceOrientationEvent.requestPermission()
                         .then(function(state) {
                             if (state === 'granted') {
-                                window.addEventListener('deviceorientation', onDeviceOrientation);
+                                window.addEventListener('deviceorientation', orientationHandler);
                                 sensorActive = true;
-                                showCalibrateTip();
                             } else {
                                 document.getElementById('bottom-hint').innerHTML =
-                                    '❌ 传感器权限被拒绝，请使用键盘 WASD 控制';
+                                    '❌ 传感器被拒，请使用键盘 WASD 转向';
                             }
                         })
                         .catch(function() {
                             document.getElementById('bottom-hint').innerHTML =
-                                '❌ 传感器不可用，请使用键盘 WASD 控制';
+                                '❌ 传感器不可用，请使用键盘 WASD 转向';
                         });
                 } else {
-                    window.addEventListener('deviceorientation', onDeviceOrientation);
+                    window.addEventListener('deviceorientation', orientationHandler);
                     sensorActive = true;
-                    showCalibrateTip();
                 }
-            }
 
-            function onDeviceOrientation(e) {
-                var beta = e.beta || 0;
-                var gamma = e.gamma || 0;
-                if (!game.calibrated) {
-                    game.calibBeta = beta;
-                    game.calibGamma = gamma;
-                    game.calibrated = true;
-                    document.getElementById('calibrate-tip').classList.add('hidden');
+                // 步态检测 (DeviceMotion)
+                if (typeof DeviceMotionEvent === 'undefined') {
+                    document.getElementById('bottom-hint').innerHTML += ' · ⚠️ 步态检测不可用';
                     return;
                 }
-                var tiltZ = (beta - game.calibBeta) / 30;
-                var tiltX = (gamma - game.calibGamma) / 30;
-                tiltZ = Math.max(-1, Math.min(1, tiltZ));
-                tiltX = Math.max(-1, Math.min(1, tiltX));
-                var deadZone = 0.04;
-                if (Math.abs(tiltX) < deadZone) tiltX = 0;
-                if (Math.abs(tiltZ) < deadZone) tiltZ = 0;
-                game.tiltX += (tiltX - game.tiltX) * 0.15;
-                game.tiltZ += (tiltZ - game.tiltZ) * 0.15;
+
+                var motionHandler = function(e) {
+                    var acc = e.accelerationIncludingGravity;
+                    if (!acc) return;
+                    var magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+                    var stepped = stepDetector.detect(magnitude);
+                    if (stepped) {
+                        applyStepPulse();
+                    }
+                };
+
+                // iOS 权限请求 (DeviceMotion)
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    DeviceMotionEvent.requestPermission()
+                        .then(function(state) {
+                            if (state === 'granted') {
+                                window.addEventListener('devicemotion', motionHandler);
+                                // 显示校准提示
+                                document.getElementById('calibrate-tip').classList.remove('hidden');
+                                document.getElementById('calibrate-tip').querySelector('.desc').textContent =
+                                    '请将手机握在手中，原地踏步 5~8 步';
+                            } else {
+                                document.getElementById('bottom-hint').innerHTML += ' · ⚠️ 步态权限被拒';
+                            }
+                        })
+                        .catch(function() {
+                            document.getElementById('bottom-hint').innerHTML += ' · ⚠️ 步态不可用';
+                        });
+                } else {
+                    window.addEventListener('devicemotion', motionHandler);
+                    document.getElementById('calibrate-tip').classList.remove('hidden');
+                    document.getElementById('calibrate-tip').querySelector('.desc').textContent =
+                        '请将手机握在手中，原地踏步 5~8 步';
+                }
             }
 
-            function showCalibrateTip() {
-                var tip = document.getElementById('calibrate-tip');
-                tip.classList.remove('hidden');
-                setTimeout(function() { if (game.calibrated) tip.classList.add('hidden'); }, 2000);
-            }
+            // ================================================================
+            //  12. 键盘控制 (备选)
+            // ================================================================
+            var keys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false,
+                space: false };
 
-            // 键盘
-            var keys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
             document.addEventListener('keydown', function(e) {
                 var key = e.key.toLowerCase();
                 if (key === 'w') keys.w = true;
@@ -896,6 +1157,8 @@
                 if (key === 'arrowdown') keys.down = true;
                 if (key === 'arrowleft') keys.left = true;
                 if (key === 'arrowright') keys.right = true;
+                if (key === ' ') { keys.space = true;
+                    e.preventDefault(); }
                 if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(e.key)) e.preventDefault();
             });
             document.addEventListener('keyup', function(e) {
@@ -908,9 +1171,11 @@
                 if (key === 'arrowdown') keys.down = false;
                 if (key === 'arrowleft') keys.left = false;
                 if (key === 'arrowright') keys.right = false;
+                if (key === ' ') keys.space = false;
             });
 
             function updateKeyboard() {
+                // 方向控制
                 var tx = 0,
                     tz = 0;
                 if (keys.w || keys.up) tz = -1;
@@ -929,10 +1194,35 @@
                     if (Math.abs(game.tiltX) < 0.001) game.tiltX = 0;
                     if (Math.abs(game.tiltZ) < 0.001) game.tiltZ = 0;
                 }
+
+                // 空格键模拟一步
+                if (keys.space && game.running && !game.finished && !game.failed) {
+                    keys.space = false; // 防止连续触发
+                    // 模拟一步脉冲 (无真实步数增加)
+                    var dirX = game.tiltX;
+                    var dirZ = game.tiltZ;
+                    var l = Math.sqrt(dirX * dirX + dirZ * dirZ);
+                    if (l > 0.05) { dirX /= l;
+                        dirZ /= l; } else { dirX = 0;
+                        dirZ = -1; }
+                    game.velocity.x += dirX * game.pulseStrength * 0.35;
+                    game.velocity.z += dirZ * game.pulseStrength * 0.35;
+                    var sp = Math.sqrt(game.velocity.x * game.velocity.x + game.velocity.z * game.velocity.z);
+                    if (sp > game.maxSpeed) {
+                        game.velocity.x = (game.velocity.x / sp) * game.maxSpeed;
+                        game.velocity.z = (game.velocity.z / sp) * game.maxSpeed;
+                    }
+                    // 步数增加 (但不用真实步数，仅用于游戏内步数)
+                    game.steps++;
+                    document.getElementById('walk-steps-display').textContent = game.steps;
+                    if (game.steps > game.maxSteps) {
+                        failGame('步数超限 ( > ' + game.maxSteps + ' )');
+                    }
+                }
             }
 
             // ================================================================
-            //  9. UI 控制
+            //  13. UI 控制
             // ================================================================
             var modal = document.getElementById('modal');
             var modalBtn = document.getElementById('modal-btn');
@@ -958,19 +1248,23 @@
                 glowMesh.position.copy(ball.position);
                 for (var i = winParticles.length - 1; i >= 0; i--) { scene.remove(winParticles[i]); }
                 winParticles.length = 0;
-                document.getElementById('steps-display').textContent = '0';
+                document.getElementById('walk-steps-display').textContent = '0';
                 document.getElementById('timer-display').textContent = game.timeLimit;
                 document.getElementById('progress-display').textContent = '0%';
                 document.getElementById('modal-stats').style.display = 'none';
                 document.getElementById('bottom-hint').innerHTML =
-                    '🎯 倾斜手机控制 · <span class="danger">60秒</span> 内到达终点 · 步数 ≤ <span class="highlight">300</span>';
+                    '🚶 走路驱动 · <span class="walk">每步</span> 冲一步 · 倾斜 <span class="highlight">转向</span>';
                 game.calibrated = false;
-                if (sensorActive) showCalibrateTip();
-                document.getElementById('modal-emoji').textContent = '🧭';
-                document.getElementById('modal-title').textContent = '体感迷宫 · 自适应';
+                // 重置步态检测
+                stepDetector.reset();
+                document.getElementById('calibrate-tip').classList.remove('hidden');
+                document.getElementById('calibrate-tip').querySelector('.desc').textContent =
+                    '请将手机握在手中，原地踏步 5~8 步';
+                document.getElementById('modal-emoji').textContent = '🚶';
+                document.getElementById('modal-title').textContent = '步行迷宫 · 体感驱动';
                 document.getElementById('modal-desc').innerHTML =
-                    '自动适配屏幕大小 · 沉浸全屏<br>⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 步数 ≤ <span style="color:#ffd740;">300</span>';
-                modalBtn.textContent = '🎮 开始挑战';
+                    '<span style="color:#69db7c;">走路</span> 驱动小球前进 · <span style="color:#ffd740;">倾斜</span> 控制方向<br>⏱ <span style="color:#ff5252;">60秒</span> 倒计时 · 🦶 真实步数 ≤ <span style="color:#ffd740;">300</span>';
+                modalBtn.textContent = '🚶 开始行走';
                 modal.classList.remove('hidden');
             }
 
@@ -980,30 +1274,29 @@
                 game.failed = false;
                 game.startTime = Date.now();
                 game.steps = 0;
-                document.getElementById('steps-display').textContent = '0';
+                document.getElementById('walk-steps-display').textContent = '0';
                 document.getElementById('timer-display').textContent = game.timeLimit;
                 modal.classList.add('hidden');
                 startTimer();
                 if (!sensorActive) {
                     document.getElementById('bottom-hint').innerHTML =
-                        '⌨️ 键盘 WASD / 方向键 控制 · 60秒内到达终点 · 步数≤300';
+                        '⌨️ WASD 转向 · 空格步进 · 方向键控制';
                 }
             }
 
             // iOS 权限处理
             var originalStartGame = startGame;
             startGame = function() {
+                // 如果传感器未激活，尝试重新请求
                 if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission ===
                     'function' && !sensorActive) {
                     DeviceOrientationEvent.requestPermission()
                         .then(function(state) {
                             if (state === 'granted') {
-                                window.addEventListener('deviceorientation', onDeviceOrientation);
                                 sensorActive = true;
-                                showCalibrateTip();
                                 originalStartGame();
                             } else {
-                                alert('需要传感器权限才能体感控制，将使用键盘控制');
+                                alert('需要传感器权限获得最佳体验，将使用键盘控制');
                                 originalStartGame();
                             }
                         })
@@ -1023,7 +1316,7 @@
             });
 
             // ================================================================
-            //  10. 全屏功能 (兼容苹果)
+            //  14. 全屏功能
             // ================================================================
             var fullscreenBtn = document.getElementById('fullscreen-btn');
             fullscreenBtn.addEventListener('click', function() {
@@ -1038,31 +1331,23 @@
             });
 
             // ================================================================
-            //  11. 响应式 (窗口变化时重载场景)
+            //  15. 响应式
             // ================================================================
             var resizeTimeout;
             window.addEventListener('resize', function() {
                 clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(function() {
-                    // 简单起见，刷新页面以完全重置尺寸 (对于游戏来说更干净)
-                    // 或者动态调整相机视野和物理尺寸，但为了防止复杂错误，建议刷新。
-                    // 这里采用动态调整相机和单位 (仅调整视觉，不重置状态)
-                    var newUnit = calcUnit();
-                    // 由于物理已经基于旧Unit运行，完全重置更安全。
-                    // 但对于用户体验，如果正在游戏，提示或简单重置。
                     if (game.running) {
-                        // 如果游戏进行中，简单重置
                         resetGame();
-                        // 由于场景重建复杂，这里直接刷新页面以重置全部尺寸
                         location.reload();
                     } else {
                         location.reload();
                     }
-                }, 300);
+                }, 400);
             });
 
             // ================================================================
-            //  12. 主循环
+            //  16. 主循环
             // ================================================================
             var lastTime = 0;
 
@@ -1070,10 +1355,18 @@
                 var dt = Math.min((time - lastTime) / 1000, 0.05);
                 lastTime = time;
 
-                if (!sensorActive || !game.calibrated) { updateKeyboard(); }
-                if (game.running) { updatePhysics(dt); }
+                // 键盘控制 (备选)
+                updateKeyboard();
+
+                // 物理更新
+                if (game.running) {
+                    updatePhysics(dt);
+                }
+
+                // 粒子更新
                 updateWinParticles(dt);
 
+                // 终点脉动
                 var pulse = 0.6 + 0.4 * Math.sin(time / 500);
                 endRing.material.opacity = 0.3 + 0.3 * pulse;
                 endGlow.material.opacity = 0.08 + 0.1 * pulse;
@@ -1088,14 +1381,15 @@
             }
 
             // ================================================================
-            //  13. 启动
+            //  17. 启动
             // ================================================================
             resetGame();
             initSensor();
             animate(0);
-            console.log('🧭 体感迷宫 · 自适应全屏版已加载！');
+
+            console.log('🚶 步行迷宫 · 体感驱动版已加载！');
             console.log('📐 当前单位尺寸:', UNIT);
-            console.log('📱 点击"全屏"按钮沉浸体验');
+            console.log('💡 走路驱动小球，倾斜控制方向');
         }
     </script>
 </body>
