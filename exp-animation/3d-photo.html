@@ -2,118 +2,801 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D视差照片体验</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>裸眼3D视差照片 · 全屏版</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background: #111; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        
-        /* 3D 容器：定义透视距离 */
-        .scene {
-            width: 90vw;
-            height: 70vh;
-            perspective: 800px; /* 关键属性：值越小，3D立体感越强 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        
-        /* 照片卡片：保持3D空间结构 */
-        .card {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            transform-style: preserve-3d; /* 关键属性：让子元素保留在3D空间中 */
-            transition: transform 0.1s ease-out;
-            border-radius: 12px;
+        body {
             overflow: hidden;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            background: #0a0a1a;
+            font-family: 'Segoe UI', -apple-system, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            height: 100vh;
+            height: 100dvh;
         }
-        
-        .card img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
             display: block;
         }
-        
-        /* 提示文字 */
-        .hint {
-            position: absolute;
-            bottom: -40px;
-            width: 100%;
-            text-align: center;
-            color: #aaa;
+
+        /* ===== 顶部UI ===== */
+        #top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 100%);
+            pointer-events: none;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        #top-bar h1 {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: clamp(13px, 2.8vw, 18px);
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+        }
+        #top-bar .btn-group {
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        .top-btn {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: clamp(11px, 1.8vw, 14px);
+            cursor: pointer;
+            transition: all 0.3s;
+            touch-action: manipulation;
+            white-space: nowrap;
+        }
+        .top-btn:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
+        .top-btn:active {
+            transform: scale(0.94);
+        }
+        .top-btn .icon {
             font-size: 14px;
         }
-        
-        /* 上传按钮样式 */
-        input[type="file"] { display: none; }
-        .upload-btn {
-            position: absolute; top: 20px; right: 20px;
-            padding: 8px 15px; background: #fff; color: #000;
-            border-radius: 20px; font-size: 14px; cursor: pointer;
+        #fileInput {
+            display: none;
+        }
+
+        /* ===== 底部提示 ===== */
+        #bottom-hint {
+            position: fixed;
+            bottom: max(24px, env(safe-area-inset-bottom));
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.3);
+            font-size: clamp(10px, 1.8vw, 13px);
+            letter-spacing: 1px;
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            padding: 6px 18px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            white-space: nowrap;
+        }
+
+        /* ===== 加载遮罩 ===== */
+        #loading {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #0a0a1a;
+            z-index: 20;
+            color: #4fc3f7;
+            gap: 16px;
+            transition: opacity 0.8s ease;
+        }
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(79, 195, 247, 0.15);
+            border-top-color: #4fc3f7;
+            border-radius: 50%;
+            animation: spin 0.8s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        #loading .text {
+            opacity: 0.7;
+            letter-spacing: 2px;
+            font-size: 14px;
+        }
+
+        /* ===== 错误遮罩 ===== */
+        #error-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 10, 26, 0.92);
+            z-index: 25;
+            color: #f87171;
+            padding: 20px;
+            text-align: center;
+        }
+        #error-overlay.show {
+            display: flex;
+        }
+        #error-overlay .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        #error-overlay .title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+        #error-overlay .desc {
+            font-size: 14px;
+            color: #94a3b8;
+            max-width: 400px;
+        }
+        #error-overlay .btn {
+            margin-top: 18px;
+            padding: 10px 30px;
+            background: #60a5fa;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* ===== 全屏状态微调 ===== */
+        :fullscreen #top-bar,
+        :-webkit-full-screen #top-bar {
+            padding-top: max(8px, env(safe-area-inset-top));
+        }
+        :fullscreen #bottom-hint,
+        :-webkit-full-screen #bottom-hint {
+            bottom: max(16px, env(safe-area-inset-bottom));
+        }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 480px) {
+            #top-bar {
+                padding: 8px 12px;
+            }
+            .top-btn {
+                padding: 4px 10px;
+                font-size: 10px;
+            }
+            #bottom-hint {
+                bottom: 14px;
+                padding: 4px 12px;
+                font-size: 9px;
+            }
+        }
+        @media (orientation: landscape) and (max-height: 500px) {
+            #bottom-hint {
+                bottom: 10px;
+                font-size: 9px;
+                padding: 3px 10px;
+            }
+            #top-bar {
+                padding: 4px 12px;
+            }
+            #top-bar h1 {
+                font-size: 12px;
+            }
+            .top-btn {
+                padding: 3px 10px;
+                font-size: 10px;
+            }
         }
     </style>
 </head>
 <body>
 
-    <label for="fileInput" class="upload-btn">📷 换一张照片</label>
-    <input type="file" id="fileInput" accept="image/*">
-
-    <div class="scene">
-        <div class="card" id="card3d">
-            <!-- 默认展示一张占位图，你可以替换成你自己的测试图 -->
-            <img src="https://picsum.photos/800/600?random=1" alt="3D Photo" id="photo">
-        </div>
-        <div class="hint">📱 倾斜手机或滑动屏幕查看3D效果</div>
+    <!-- ===== 加载遮罩 ===== -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <div class="text">加载 3D 引擎...</div>
     </div>
 
-<script>
-    const card = document.getElementById('card3d');
-    const fileInput = document.getElementById('fileInput');
-    const photo = document.getElementById('photo');
+    <!-- ===== 错误遮罩 ===== -->
+    <div id="error-overlay">
+        <div class="icon">⚠️</div>
+        <div class="title">加载失败</div>
+        <div class="desc" id="error-desc">请检查网络连接后刷新重试</div>
+        <button class="btn" onclick="location.reload()">🔄 重新加载</button>
+    </div>
 
-    // 1. 处理照片上传
-    fileInput.addEventListener('change', function(e) {
-        if (e.target.files && e.target.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                photo.src = event.target.result;
-            };
-            reader.readAsDataURL(e.target.files[0]);
+    <!-- ===== 3D 容器 ===== -->
+    <div id="canvas-container"></div>
+
+    <!-- ===== 顶部栏 ===== -->
+    <div id="top-bar">
+        <h1>✦ 裸眼3D 视差</h1>
+        <div class="btn-group">
+            <button class="top-btn" id="fullscreen-btn">⛶ 全屏</button>
+            <label class="top-btn" for="fileInput">📷 换照片</label>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+    </div>
+
+    <!-- ===== 底部提示 ===== -->
+    <div id="bottom-hint">🖱 倾斜手机 或 移动鼠标 · 感受多层景深</div>
+
+    <!-- ============================================================ -->
+    <!-- 使用 importmap 加载 Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
         }
-    });
+    </script>
 
-    // 2. 核心：绑定陀螺仪数据 (DeviceOrientation)
-    function initGyro() {
-        window.addEventListener('deviceorientation', (event) => {
-            // beta: 前后倾斜 (-180~180), gamma: 左右倾斜 (-90~90)
-            let beta = event.beta ? event.beta / 3 : 0; 
-            let gamma = event.gamma ? event.gamma / 3 : 0;
-            
-            // 限制最大旋转角度，防止画面翻转
-            beta = Math.max(-20, Math.min(20, beta));
-            gamma = Math.max(-20, Math.min(20, gamma));
+    <script type="module">
+        // ================================================================
+        //  1. 导入
+        // ================================================================
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-            // 应用CSS3 3D变换：注意 rotateX 和 rotateY 的方向是相反的
-            card.style.transform = `rotateX(${-beta}deg) rotateY(${gamma}deg)`;
+        // ================================================================
+        //  2. DOM 引用
+        // ================================================================
+        const container = document.getElementById('canvas-container');
+        const loadingEl = document.getElementById('loading');
+        const errorOverlay = document.getElementById('error-overlay');
+        const errorDesc = document.getElementById('error-desc');
+        const fileInput = document.getElementById('fileInput');
+        const hintEl = document.getElementById('bottom-hint');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+        // ================================================================
+        //  3. 状态
+        // ================================================================
+        const state = {
+            tiltX: 0,
+            tiltY: 0,
+            targetX: 0,
+            targetY: 0,
+            calibrated: false,
+            calibBeta: 0,
+            calibGamma: 0,
+            sensorActive: false,
+            layers: [],
+            currentTexture: null,
+            imageLoaded: false,
+            isMouseControl: false,
+            mouseX: 0,
+            mouseY: 0,
+        };
+
+        // ================================================================
+        //  4. 默认图片
+        // ================================================================
+        const DEFAULT_IMAGE = 'https://picsum.photos/1200/800?random=42';
+
+        // ================================================================
+        //  5. 全屏功能 (兼容苹果)
+        // ================================================================
+        function toggleFullscreen() {
+            const el = document.documentElement;
+            const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+            if (!isFullscreen) {
+                if (el.requestFullscreen) {
+                    el.requestFullscreen().catch(() => {});
+                } else if (el.webkitRequestFullscreen) {
+                    el.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+        // 监听全屏状态变化，更新按钮文字
+        document.addEventListener('fullscreenchange', updateFullscreenBtn);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
+
+        function updateFullscreenBtn() {
+            const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+            fullscreenBtn.textContent = isFullscreen ? '⛶ 退出' : '⛶ 全屏';
+        }
+
+        // ================================================================
+        //  6. Three.js 场景
+        // ================================================================
+        let scene, camera, renderer, controls;
+        let layerGroup;
+        const LAYER_COUNT = 5;
+        const LAYER_DEPTHS = [-0.6, -0.3, 0, 0.3, 0.6];
+        const LAYER_SCALES = [0.82, 0.91, 1.0, 1.09, 1.18];
+        const LAYER_OPACITIES = [0.35, 0.65, 1.0, 0.85, 0.55];
+        const MAX_ROTATION = 25;
+
+        function initScene() {
+            const w = container.clientWidth || window.innerWidth;
+            const h = container.clientHeight || window.innerHeight;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x080816);
+
+            // 相机 (正交，保证各层比例一致)
+            const aspect = w / h;
+            const frustumSize = 2.2;
+            camera = new THREE.OrthographicCamera(
+                -frustumSize * aspect,
+                frustumSize * aspect,
+                frustumSize,
+                -frustumSize,
+                0.1,
+                20
+            );
+            camera.position.set(0, 0, 4);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                alpha: false,
+            });
+            renderer.setSize(w, h);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2;
+            container.appendChild(renderer.domElement);
+
+            // 控制器 (可拖拽查看3D结构)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.enableZoom = true;
+            controls.zoomSpeed = 0.6;
+            controls.target.set(0, 0, 0);
+            controls.minDistance = 1.5;
+            controls.maxDistance = 10;
+            controls.enablePan = false;
+            controls.autoRotate = false;
+
+            // 灯光
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            dirLight.position.set(2, 3, 5);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            const fillLight = new THREE.DirectionalLight(0x4488ff, 0.3);
+            fillLight.position.set(-2, -1, 3);
+            scene.add(fillLight);
+
+            const rimLight = new THREE.DirectionalLight(0x88aaff, 0.2);
+            rimLight.position.set(0, -3, -4);
+            scene.add(rimLight);
+
+            layerGroup = new THREE.Group();
+            scene.add(layerGroup);
+
+            createParticles();
+            loadImage(DEFAULT_IMAGE);
+
+            animate();
+            window.addEventListener('resize', onResize);
+
+            setTimeout(() => {
+                loadingEl.classList.add('hidden');
+            }, 400);
+        }
+
+        // ================================================================
+        //  7. 创建图层
+        // ================================================================
+        function createLayers(texture) {
+            while (layerGroup.children.length > 0) {
+                const child = layerGroup.children[0];
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+                layerGroup.remove(child);
+            }
+            state.layers = [];
+
+            const aspect = texture.image.width / texture.image.height;
+            const baseWidth = 1.8;
+            const baseHeight = baseWidth / aspect;
+
+            for (let i = 0; i < LAYER_COUNT; i++) {
+                const depth = LAYER_DEPTHS[i];
+                const scale = LAYER_SCALES[i];
+                const opacity = LAYER_OPACITIES[i];
+
+                const w = baseWidth * scale;
+                const h = baseHeight * scale;
+
+                const geometry = new THREE.PlaneGeometry(w, h);
+                const material = new THREE.MeshPhysicalMaterial({
+                    map: texture,
+                    transparent: true,
+                    opacity: opacity,
+                    roughness: 0.15,
+                    metalness: 0.05,
+                    clearcoat: 0.1,
+                    side: THREE.DoubleSide,
+                    depthWrite: true,
+                    envMapIntensity: 0.3,
+                });
+
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.z = depth;
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+
+                mesh.userData = {
+                    depth: depth,
+                    scale: scale,
+                    index: i,
+                    baseWidth: w,
+                    baseHeight: h,
+                };
+
+                layerGroup.add(mesh);
+                state.layers.push(mesh);
+
+                // 中间层边框光晕
+                if (i === 2) {
+                    const borderMat = new THREE.MeshBasicMaterial({
+                        color: 0x60a5fa,
+                        transparent: true,
+                        opacity: 0.06,
+                        side: THREE.BackSide,
+                    });
+                    const borderGeo = new THREE.PlaneGeometry(w + 0.06, h + 0.06);
+                    const borderMesh = new THREE.Mesh(borderGeo, borderMat);
+                    borderMesh.position.z = depth - 0.001;
+                    layerGroup.add(borderMesh);
+                }
+
+                // 中间层阴影
+                if (i === 2) {
+                    const shadowMat = new THREE.MeshBasicMaterial({
+                        color: 0x000000,
+                        transparent: true,
+                        opacity: 0.08,
+                        side: THREE.DoubleSide,
+                    });
+                    const shadowGeo = new THREE.PlaneGeometry(w * 1.4, h * 1.4);
+                    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+                    shadowMesh.position.z = -0.8;
+                    shadowMesh.rotation.x = 0.05;
+                    layerGroup.add(shadowMesh);
+                }
+            }
+
+            state.imageLoaded = true;
+        }
+
+        // ================================================================
+        //  8. 加载图片
+        // ================================================================
+        function loadImage(url) {
+            const loader = new THREE.TextureLoader();
+            loader.load(
+                url,
+                (texture) => {
+                    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                    state.currentTexture = texture;
+                    createLayers(texture);
+                    hintEl.textContent = '🖱 倾斜手机 或 移动鼠标 · 感受多层景深';
+                },
+                undefined,
+                (err) => {
+                    console.warn('图片加载失败', err);
+                    if (url !== DEFAULT_IMAGE) {
+                        loadImage(DEFAULT_IMAGE);
+                    } else {
+                        showError('图片加载失败，请尝试上传本地照片');
+                    }
+                }
+            );
+        }
+
+        // ================================================================
+        //  9. 粒子背景
+        // ================================================================
+        function createParticles() {
+            const count = 400;
+            const positions = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            const colors = new Float32Array(count * 3);
+
+            for (let i = 0; i < count; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 12;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 8;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 10 - 3;
+                sizes[i] = 0.005 + Math.random() * 0.015;
+                const c = new THREE.Color().setHSL(0.6 + Math.random() * 0.15, 0.6, 0.3 + Math.random() * 0.3);
+                colors[i * 3] = c.r;
+                colors[i * 3 + 1] = c.g;
+                colors[i * 3 + 2] = c.b;
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const mat = new THREE.PointsMaterial({
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.35,
+                size: 0.02,
+                blending: THREE.AdditiveBlending,
+                sizeAttenuation: true,
+                depthWrite: false,
+            });
+
+            const particles = new THREE.Points(geo, mat);
+            particles.position.z = -1;
+            scene.add(particles);
+            scene.userData.particles = particles;
+        }
+
+        // ================================================================
+        //  10. 传感器控制
+        // ================================================================
+        function initSensor() {
+            if (typeof DeviceOrientationEvent === 'undefined') {
+                enableMouseControl();
+                return;
+            }
+
+            const handler = (e) => {
+                const beta = e.beta || 0;
+                const gamma = e.gamma || 0;
+
+                if (!state.calibrated) {
+                    state.calibBeta = beta;
+                    state.calibGamma = gamma;
+                    state.calibrated = true;
+                    return;
+                }
+
+                let tiltX = (gamma - state.calibGamma) / 30;
+                let tiltY = (beta - state.calibBeta) / 30;
+
+                tiltX = Math.max(-1, Math.min(1, tiltX));
+                tiltY = Math.max(-1, Math.min(1, tiltY));
+
+                const deadZone = 0.03;
+                if (Math.abs(tiltX) < deadZone) tiltX = 0;
+                if (Math.abs(tiltY) < deadZone) tiltY = 0;
+
+                state.targetX = tiltX * MAX_ROTATION;
+                state.targetY = tiltY * MAX_ROTATION;
+                state.sensorActive = true;
+            };
+
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                document.addEventListener('click', () => {
+                    DeviceOrientationEvent.requestPermission()
+                        .then((response) => {
+                            if (response === 'granted') {
+                                window.addEventListener('deviceorientation', handler);
+                                state.sensorActive = true;
+                            } else {
+                                enableMouseControl();
+                            }
+                        })
+                        .catch(() => { enableMouseControl(); });
+                }, { once: true });
+                document.addEventListener('touchstart', () => {
+                    if (!state.sensorActive) {
+                        DeviceOrientationEvent.requestPermission()
+                            .then((response) => {
+                                if (response === 'granted') {
+                                    window.addEventListener('deviceorientation', handler);
+                                    state.sensorActive = true;
+                                }
+                            })
+                            .catch(() => {});
+                    }
+                }, { once: true });
+            } else {
+                window.addEventListener('deviceorientation', handler);
+                state.sensorActive = true;
+            }
+
+            setTimeout(() => {
+                if (!state.sensorActive) {
+                    enableMouseControl();
+                }
+            }, 5000);
+        }
+
+        // ================================================================
+        //  11. 鼠标控制 (桌面备选)
+        // ================================================================
+        function enableMouseControl() {
+            state.isMouseControl = true;
+            hintEl.textContent = '🖱 移动鼠标 · 体验3D视差效果';
+
+            document.addEventListener('mousemove', (e) => {
+                const x = (e.clientX / window.innerWidth - 0.5) * 2;
+                const y = (e.clientY / window.innerHeight - 0.5) * 2;
+                state.targetX = x * MAX_ROTATION * 0.8;
+                state.targetY = -y * MAX_ROTATION * 0.8;
+            });
+
+            document.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    const x = (touch.clientX / window.innerWidth - 0.5) * 2;
+                    const y = (touch.clientY / window.innerHeight - 0.5) * 2;
+                    state.targetX = x * MAX_ROTATION * 0.8;
+                    state.targetY = -y * MAX_ROTATION * 0.8;
+                }
+            }, { passive: true });
+        }
+
+        // ================================================================
+        //  12. 上传照片
+        // ================================================================
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const dataUrl = ev.target.result;
+                    loadImage(dataUrl);
+                };
+                reader.readAsDataURL(file);
+                fileInput.value = '';
+            }
         });
-    }
 
-    // 3. 兼容电脑端：鼠标移动模拟3D效果
-    document.addEventListener('mousemove', (e) => {
-        const xAxis = (window.innerWidth / 2 - e.pageX) / 25;
-        const yAxis = (window.innerHeight / 2 - e.pageY) / 25;
-        card.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
-    });
+        // ================================================================
+        //  13. 错误处理
+        // ================================================================
+        function showError(msg) {
+            errorDesc.textContent = msg || '未知错误，请刷新重试';
+            errorOverlay.classList.add('show');
+            loadingEl.classList.add('hidden');
+        }
 
-    // 4. 请求陀螺仪权限 (iOS 13+ 必须)
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        document.body.addEventListener('click', () => {
-            DeviceOrientationEvent.requestPermission().then(response => {
-                if (response === 'granted') initGyro();
-            }).catch(console.error);
-        }, { once: true });
-    } else {
-        initGyro();
-    }
-</script>
+        // ================================================================
+        //  14. 响应式
+        // ================================================================
+        function onResize() {
+            const w = container.clientWidth || window.innerWidth;
+            const h = container.clientHeight || window.innerHeight;
+            const aspect = w / h;
+            const frustumSize = 2.2;
+            camera.left = -frustumSize * aspect;
+            camera.right = frustumSize * aspect;
+            camera.top = frustumSize;
+            camera.bottom = -frustumSize;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+
+        // ================================================================
+        //  15. 动画循环
+        // ================================================================
+        let lastTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const dt = Math.min((now - lastTime) / 1000, 0.05);
+            lastTime = now;
+
+            const smoothFactor = 0.08;
+            state.tiltX += (state.targetX - state.tiltX) * smoothFactor;
+            state.tiltY += (state.targetY - state.tiltY) * smoothFactor;
+
+            const rotX = state.tiltY * Math.PI / 180;
+            const rotY = state.tiltX * Math.PI / 180;
+            layerGroup.rotation.x = rotX;
+            layerGroup.rotation.y = rotY;
+
+            const floatOffset = Math.sin(now / 3000) * 0.0003;
+            layerGroup.position.y = floatOffset;
+
+            if (scene.userData.particles) {
+                const particles = scene.userData.particles;
+                particles.rotation.y += 0.0002;
+                particles.rotation.x = Math.sin(now / 5000) * 0.01;
+            }
+
+            if (controls) {
+                controls.update();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // ================================================================
+        //  16. 启动
+        // ================================================================
+        try {
+            initScene();
+            initSensor();
+
+            setTimeout(() => {
+                if (!state.sensorActive && !state.isMouseControl) {
+                    enableMouseControl();
+                }
+            }, 4000);
+
+            console.log('✨ 裸眼3D视差照片 · 全屏版已启动！');
+            console.log('📱 点击"全屏"进入沉浸模式');
+            console.log('📸 点击"换照片"上传自己的图片');
+
+        } catch (err) {
+            console.error('启动失败:', err);
+            showError(err.message || '启动失败，请刷新重试');
+        }
+
+        // ================================================================
+        //  17. 暴露API
+        // ================================================================
+        window.__parallax = {
+            scene,
+            camera,
+            renderer,
+            controls,
+            layerGroup,
+            state,
+            loadImage,
+            toggleFullscreen,
+        };
+    </script>
 </body>
 </html>
