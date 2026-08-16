@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>裸眼3D视差照片 · 全屏版</title>
     <style>
         * {
@@ -263,7 +264,7 @@
     <div id="bottom-hint">🖱 倾斜手机 或 移动鼠标 · 感受多层景深</div>
 
     <!-- ============================================================ -->
-    <!-- 使用 importmap 加载 Three.js -->
+    <!-- 方案一：ES Module + importmap -->
     <script type="importmap">
         {
             "imports": {
@@ -275,7 +276,7 @@
 
     <script type="module">
         // ================================================================
-        //  1. 导入
+        //  1. 导入 (ES Module 方式)
         // ================================================================
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -307,8 +308,6 @@
             currentTexture: null,
             imageLoaded: false,
             isMouseControl: false,
-            mouseX: 0,
-            mouseY: 0,
         };
 
         // ================================================================
@@ -339,7 +338,6 @@
 
         fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-        // 监听全屏状态变化，更新按钮文字
         document.addEventListener('fullscreenchange', updateFullscreenBtn);
         document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
 
@@ -349,7 +347,7 @@
         }
 
         // ================================================================
-        //  6. Three.js 场景
+        //  6. 场景初始化 (使用 ES Module 导入的 THREE)
         // ================================================================
         let scene, camera, renderer, controls;
         let layerGroup;
@@ -363,10 +361,11 @@
             const w = container.clientWidth || window.innerWidth;
             const h = container.clientHeight || window.innerHeight;
 
+            // 场景
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x080816);
 
-            // 相机 (正交，保证各层比例一致)
+            // 相机 (正交)
             const aspect = w / h;
             const frustumSize = 2.2;
             camera = new THREE.OrthographicCamera(
@@ -380,6 +379,7 @@
             camera.position.set(0, 0, 4);
             camera.lookAt(0, 0, 0);
 
+            // 渲染器
             renderer = new THREE.WebGLRenderer({
                 antialias: true,
                 alpha: false,
@@ -392,8 +392,12 @@
             renderer.toneMappingExposure = 1.2;
             container.appendChild(renderer.domElement);
 
-            // 控制器 (可拖拽查看3D结构)
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            // ================================================================
+            //  关键修复：使用 ES Module 导入的 OrbitControls
+            //  ✅ 正确：直接使用 OrbitControls (已通过 import 导入)
+            //  ❌ 错误：不要使用 THREE.OrbitControls
+            // ================================================================
+            controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.08;
             controls.enableZoom = true;
@@ -421,18 +425,28 @@
             rimLight.position.set(0, -3, -4);
             scene.add(rimLight);
 
+            // 图层组
             layerGroup = new THREE.Group();
             scene.add(layerGroup);
 
+            // 粒子背景
             createParticles();
+
+            // 加载默认图片
             loadImage(DEFAULT_IMAGE);
 
+            // 启动动画
             animate();
+
+            // 响应式
             window.addEventListener('resize', onResize);
 
+            // 隐藏加载
             setTimeout(() => {
                 loadingEl.classList.add('hidden');
             }, 400);
+
+            console.log('✨ 3D场景初始化完成 (ES Module)');
         }
 
         // ================================================================
@@ -737,28 +751,29 @@
             const dt = Math.min((now - lastTime) / 1000, 0.05);
             lastTime = now;
 
+            // 平滑跟随
             const smoothFactor = 0.08;
             state.tiltX += (state.targetX - state.tiltX) * smoothFactor;
             state.tiltY += (state.targetY - state.tiltY) * smoothFactor;
 
+            // 应用旋转
             const rotX = state.tiltY * Math.PI / 180;
             const rotY = state.tiltX * Math.PI / 180;
             layerGroup.rotation.x = rotX;
             layerGroup.rotation.y = rotY;
 
+            // 微浮动
             const floatOffset = Math.sin(now / 3000) * 0.0003;
             layerGroup.position.y = floatOffset;
 
+            // 粒子动画
             if (scene.userData.particles) {
                 const particles = scene.userData.particles;
                 particles.rotation.y += 0.0002;
                 particles.rotation.x = Math.sin(now / 5000) * 0.01;
             }
 
-            if (controls) {
-                controls.update();
-            }
-
+            controls.update();
             renderer.render(scene, camera);
         }
 
@@ -775,7 +790,7 @@
                 }
             }, 4000);
 
-            console.log('✨ 裸眼3D视差照片 · 全屏版已启动！');
+            console.log('✨ 裸眼3D视差照片 · ES Module 版已启动！');
             console.log('📱 点击"全屏"进入沉浸模式');
             console.log('📸 点击"换照片"上传自己的图片');
 
@@ -785,7 +800,7 @@
         }
 
         // ================================================================
-        //  17. 暴露API
+        //  17. 暴露API (方便调试)
         // ================================================================
         window.__parallax = {
             scene,
