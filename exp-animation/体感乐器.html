@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🎵 体感音符MVP</title>
+    <style>
+        body { 
+            margin: 0; height: 100vh; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; background: #111; color: #eee;
+            font-family: system-ui, sans-serif; touch-action: none; user-select: none;
+        }
+        #visualizer {
+            width: 80vw; height: 20px; background: #333; border-radius: 10px;
+            margin-bottom: 30px; position: relative; overflow: hidden;
+        }
+        #indicator {
+            width: 4px; height: 100%; background: #0f0; position: absolute;
+            left: 50%; transition: left 0.05s linear; /* 视觉反馈需极低延迟 */
+        }
+        .zone-marker {
+            position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.3);
+        }
+        #status { font-size: 1.2rem; margin-bottom: 20px; min-height: 1.5em; }
+        #start-btn {
+            padding: 15px 40px; font-size: 1.2rem; border: none; border-radius: 30px;
+            background: #e94560; color: white; cursor: pointer;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="status">点击开始，左右倾斜手机</div>
+    
+    <!-- 可视化反馈条：帮助建立动作-声音的心理映射 -->
+    <div id="visualizer">
+        <div class="zone-marker" style="left: 30%"></div>
+        <div class="zone-marker" style="left: 70%"></div>
+        <div id="indicator"></div>
+    </div>
+    
+    <button id="start-btn">▶ 启动传感器</button>
+
+<script>
+/**
+ * 🎵 单轴体感音符 MVP
+ * 核心目标：验证 Y轴(前后)倾斜 → 音符触发的 延迟/平滑度/手感
+ * 设计原则：零依赖、纯原生API、极致性能、可感知反馈
+ */
+
+// === 可调参数（手感调优关键）===
+const CONFIG = {
+    axis: 'beta',           // 测试轴：beta=前后倾斜(pitch)，gamma=左右倾斜(roll)
+    deadzone: 5,            // 中心死区(°)：避免静止时误触发
+    threshold: 25,          // 触发阈值(°)：超过此角度才发声
+    smoothing: 0.3,         // 低通滤波系数(0~1)：越小越平滑但延迟越高
+    noteFreq: 440,          // 基础频率(Hz)：A4音
+    attackTime: 0.05,       // 音头时间(s)：影响"敲击感"vs"绵软感"
+    releaseTime: 0.1        // 释音时间(s)：影响音符尾韵长度
+};
+
+// === 状态变量 ===
+let audioCtx, oscillator, gainNode;
+let isPlaying = false;
+let smoothedValue = 0;
+let lastTriggerState = false;
+
+// === 初始化音频上下文（必须用户交互后创建）===
+function initAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    oscillator = audioCtx.createOscillator();
+    gainNode = audioCtx.createGain();
+    
+    oscillator.type = 'sine'; // 纯净正弦波，便于专注手感而非音色
+    oscillator.frequency.value = CONFIG.noteFreq;
+    gainNode.gain.value = 0;
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.start();
+}
+
+// === 传感器数据处理核心 ===
+function handleOrientation(event) {
+    // 1. 获取原始值并应用死区
+    let raw = event[CONFIG.axis] || 0;
+    if (Math.abs(raw) < CONFIG.deadzone) raw = 0;
+    
+    // 2. 指数移动平均(EMA)低通滤波 —— 手感灵魂所在
+    //    公式：smoothed = smoothed + α * (raw - smoothed)
+    //    α=0.3 平衡了响应速度与抖动抑制，可通过CONFIG调整
+    smoothedValue += CONFIG.smoothing * (raw - smoothedValue);
+    
+    // 3. 更新视觉反馈（requestAnimationFrame保证流畅）
+    requestAnimationFrame(() => {
+        const pct = 50 + (smoothedValue / 90) * 50; // 映射到0-100%
+        document.getElementById('indicator').style.left = `${Math.max(0, Math.min(100, pct))}%`;
+    });
+    
+    // 4. 触发逻辑（带滞回防抖）
+    const shouldTrigger = Math.abs(smoothedValue) > CONFIG.threshold;
+    
+    if (shouldTrigger && !lastTriggerState) {
+        // 进入触发区：淡入
+        gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + CONFIG.attackTime);
+        document.getElementById('status').textContent = `🎵 发声! 角度:${smoothedValue.toFixed(1)}°`;
+    } else if (!shouldTrigger && lastTriggerState) {
+        // 离开触发区：淡出
+        gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + CONFIG.releaseTime);
+        document.getElementById('status').textContent = `⏸ 静音 | 角度:${smoothedValue.toFixed(1)}°`;
+    }
+    
+    lastTriggerState = shouldTrigger;
+}
+
+// === 启动流程 ===
+document.getElementById('start-btn').addEventListener('click', async () => {
+    // 检查传感器支持
+    if (!window.DeviceOrientationEvent) {
+        alert('❌ 当前浏览器不支持设备方向API');
+        return;
+    }
+    
+    // iOS 13+ 需要显式请求权限
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+            const perm = await DeviceOrientationEvent.requestPermission();
+            if (perm !== 'granted') {
+                alert('⚠️ 传感器权限被拒绝，请在设置中允许');
+                return;
+            }
+        } catch (e) {
+            alert('权限请求失败: ' + e.message);
+            return;
+        }
+    }
+    
+    // 初始化音频 & 绑定传感器
+    initAudio();
+    window.addEventListener('deviceorientation', handleOrientation);
+    document.getElementById('start-btn').classList.add('hidden');
+    document.getElementById('status').textContent = `✅ 就绪 | 测试轴:${CONFIG.axis} | 阈值:${CONFIG.threshold}°`;
+});
+</script>
+</body>
+</html>
