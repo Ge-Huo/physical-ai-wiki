@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>五声·触</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; font-family: system-ui, sans-serif; }
+
+  /* 启动遮罩 */
+  #overlay {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+    background: rgba(10,10,18,0.95); color: #e0e0e0; transition: opacity 0.4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #start-btn {
+    padding: 16px 48px; border: 1px solid rgba(255,255,255,0.3); border-radius: 40px;
+    background: rgba(255,255,255,0.08); color: #fff; font-size: 18px; letter-spacing: 4px; cursor: pointer;
+  }
+  #start-btn:active { background: rgba(255,255,255,0.2); }
+  .hint { font-size: 12px; opacity: 0.5; }
+
+  /* 琴键容器 */
+  #keys {
+    display: flex; width: 100%; height: 100%;
+  }
+  .key {
+    flex: 1; position: relative; display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: env(safe-area-inset-bottom, 20px); border-right: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.08s; cursor: pointer; user-select: none; touch-action: none;
+  }
+  .key:last-child { border-right: none; }
+  .key .label {
+    font-size: 14px; color: rgba(255,255,255,0.25); letter-spacing: 2px; pointer-events: none;
+    margin-bottom: 20px;
+  }
+  .key.active { background: var(--glow); }
+  .key.active .label { color: rgba(255,255,255,0.9); }
+
+  /* 每个键独立配色 */
+  .key:nth-child(1) { --glow: rgba(100,180,255,0.15); --color: #64b4ff; }
+  .key:nth-child(2) { --glow: rgba(130,220,180,0.15); --color: #82dcb4; }
+  .key:nth-child(3) { --glow: rgba(255,200,100,0.15); --color: #ffc864; }
+  .key:nth-child(4) { --glow: rgba(220,140,180,0.15); --color: #dc8cb4; }
+  .key:nth-child(5) { --glow: rgba(180,140,255,0.15); --color: #b48cff; }
+
+  /* 涟漪反馈 */
+  .ripple {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, var(--color) 0%, transparent 70%);
+    transform: translate(-50%, -50%) scale(0); animation: rippleAnim 0.5s ease-out forwards;
+  }
+  @keyframes rippleAnim {
+    to { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+  }
+
+  /* 氛围切换按钮 */
+  #mood-toggle {
+    position: fixed; top: max(env(safe-area-inset-top, 12px), 12px); right: 16px; z-index: 50;
+    padding: 8px 16px; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px;
+    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6); font-size: 12px;
+    letter-spacing: 2px; cursor: pointer; backdrop-filter: blur(8px);
+  }
+  #mood-toggle:active { background: rgba(255,255,255,0.15); }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <button id="start-btn">触 · 开始</button>
+  <div class="hint">建议佩戴耳机体验</div>
+</div>
+
+<button id="mood-toggle">氛围：空灵</button>
+<div id="keys"></div>
+
+<script>
+// ========== 音频引擎 ==========
+const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00]; // C D E G A
+const MOODS = {
+  ethereal: { label: '空灵', droneFreqs: [130.81, 196.00], filterFreq: 800, decay: 2.5 },
+  warm:     { label: '温暖', droneFreqs: [130.81, 164.81], filterFreq: 1200, decay: 1.8 },
+  dark:     { label: '幽深', droneFreqs: [110.00, 164.81], filterFreq: 500, decay: 3.0 },
+};
+const MOOD_KEYS = Object.keys(MOODS);
+
+let ctx, masterGain, droneOscs = [], currentMoodIdx = 0;
+let isAudioStarted = false;
+
+function initAudio() {
+  if (isAudioStarted) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 0.6;
+  masterGain.connect(ctx.destination);
+  startDrone();
+  isAudioStarted = true;
+}
+
+function startDrone() {
+  stopDrone();
+  const mood = MOODS[MOOD_KEYS[currentMoodIdx]];
+  mood.droneFreqs.forEach(freq => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    filter.type = 'lowpass';
+    filter.frequency.value = mood.filterFreq;
+    filter.Q.value = 1;
+    gain.gain.value = 0;
+    // 淡入
+    gain.gain.setTargetAtTime(0.08, ctx.currentTime, 1.5);
+    osc.connect(filter).connect(gain).connect(masterGain);
+    osc.start();
+    droneOscs.push({ osc, gain, filter });
+  });
+}
+
+function stopDrone() {
+  droneOscs.forEach(d => {
+    d.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+    d.osc.stop(ctx.currentTime + 1);
+  });
+  droneOscs = [];
+}
+
+function playNote(freq) {
+  if (!ctx) return;
+  const mood = MOODS[MOOD_KEYS[currentMoodIdx]];
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = 'triangle';
+  osc.frequency.value = freq;
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(mood.filterFreq * 2, ctx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(mood.filterFreq * 0.5, ctx.currentTime + mood.decay);
+  filter.Q.value = 2;
+
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + mood.decay);
+
+  osc.connect(filter).connect(gain).connect(masterGain);
+  osc.start();
+  osc.stop(ctx.currentTime + mood.decay + 0.1);
+}
+
+// ========== UI 构建 ==========
+const NOTE_NAMES = ['宫', '商', '角', '徵', '羽'];
+const keysContainer = document.getElementById('keys');
+
+PENTATONIC.forEach((freq, i) => {
+  const key = document.createElement('div');
+  key.className = 'key';
+  key.dataset.freq = freq;
+  key.innerHTML = `<span class="label">${NOTE_NAMES[i]}</span>`;
+  keysContainer.appendChild(key);
+});
+
+// ========== 触控处理（支持多点） ==========
+const activeTouches = new Map();
+
+function handleTouch(e) {
+  e.preventDefault();
+  const touches = e.changedTouches;
+  for (let i = 0; i < touches.length; i++) {
+    const t = touches[i];
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const key = el?.closest?.('.key');
+
+    if (e.type === 'touchstart' && key) {
+      activeTouches.set(t.identifier, key);
+      activateKey(key);
+    } else if (e.type === 'touchmove') {
+      const prevKey = activeTouches.get(t.identifier);
+      if (key && key !== prevKey) {
+        if (prevKey) deactivateKey(prevKey);
+        activeTouches.set(t.identifier, key);
+        activateKey(key);
+      } else if (!key && prevKey) {
+        deactivateKey(prevKey);
+        activeTouches.delete(t.identifier);
+      }
+    } else if (e.type === 'touchend' || e.type === 'touchcancel') {
+      const prevKey = activeTouches.get(t.identifier);
+      if (prevKey) deactivateKey(prevKey);
+      activeTouches.delete(t.identifier);
+    }
+  }
+}
+
+function activateKey(key) {
+  if (key.classList.contains('active')) return;
+  key.classList.add('active');
+  playNote(parseFloat(key.dataset.freq));
+  spawnRipple(key);
+}
+
+function deactivateKey(key) {
+  key.classList.remove('active');
+}
+
+function spawnRipple(key) {
+  const r = document.createElement('div');
+  r.className = 'ripple';
+  const rect = key.getBoundingClientRect();
+  r.style.left = rect.width / 2 + 'px';
+  r.style.bottom = '60px';
+  r.style.width = r.style.height = Math.min(rect.width, rect.height) * 0.6 + 'px';
+  key.appendChild(r);
+  r.addEventListener('animationend', () => r.remove());
+}
+
+keysContainer.addEventListener('touchstart', handleTouch, { passive: false });
+keysContainer.addEventListener('touchmove', handleTouch, { passive: false });
+keysContainer.addEventListener('touchend', handleTouch, { passive: false });
+keysContainer.addEventListener('touchcancel', handleTouch, { passive: false });
+
+// 鼠标兼容（桌面调试用）
+keysContainer.addEventListener('mousedown', e => {
+  const key = e.target.closest('.key');
+  if (key) { activateKey(key); key._mouseDown = true; }
+});
+window.addEventListener('mouseup', () => {
+  document.querySelectorAll('.key.active').forEach(k => { if (k._mouseDown) deactivateKey(k); });
+});
+
+// ========== 氛围切换 ==========
+const moodBtn = document.getElementById('mood-toggle');
+moodBtn.addEventListener('click', () => {
+  if (!isAudioStarted) return;
+  currentMoodIdx = (currentMoodIdx + 1) % MOOD_KEYS.length;
+  moodBtn.textContent = `氛围：${MOODS[MOOD_KEYS[currentMoodIdx]].label}`;
+  startDrone();
+});
+
+// ========== 启动入口 ==========
+document.getElementById('start-btn').addEventListener('click', () => {
+  initAudio();
+  document.getElementById('overlay').classList.add('hidden');
+});
+</script>
+</body>
+</html>
