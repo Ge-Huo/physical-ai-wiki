@@ -80,6 +80,54 @@
     backdrop-filter: blur(6px);
   }
   #tip.show { opacity: 1; }
+
+  /* ===== 瀑布流谱面 ===== */
+  #chart {
+    position: fixed; inset: 0; z-index: 30; pointer-events: none;
+    opacity: 0; transition: opacity 0.45s;
+  }
+  #chart.show { opacity: 1; }
+
+  /* 曲目按钮，放左上角与右侧的氛围按钮分开 */
+  #song-btn {
+    position: fixed; top: max(env(safe-area-inset-top, 12px), 12px); left: 16px; z-index: 50;
+    padding: 8px 16px; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px;
+    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6); font-size: 12px;
+    letter-spacing: 2px; cursor: pointer; backdrop-filter: blur(8px);
+  }
+  #song-btn:active { background: rgba(255,255,255,0.15); }
+  #song-btn.on {
+    color: #a8d8ff; border-color: rgba(124,196,255,0.45);
+    background: rgba(124,196,255,0.12);
+  }
+
+  /* 乐句提示，随小节切换 */
+  #lyric {
+    position: fixed; left: 50%; top: 9%; transform: translateX(-50%);
+    font-size: 19px; letter-spacing: 7px; color: rgba(255,255,255,0.8);
+    opacity: 0; transition: opacity 0.7s; pointer-events: none; z-index: 35;
+    text-shadow: 0 0 24px rgba(124,196,255,0.45); white-space: nowrap;
+  }
+  #lyric.show { opacity: 1; }
+
+  /* 结束卡片：只报"弹完了"，不给分数 */
+  #song-end {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: rgba(10,10,18,0.84); backdrop-filter: blur(12px);
+    opacity: 0; pointer-events: none; transition: opacity 0.5s;
+  }
+  #song-end.show { opacity: 1; pointer-events: auto; }
+  #song-end .title { font-size: 25px; letter-spacing: 9px; color: #fff; }
+  #song-end .sub { font-size: 12px; color: rgba(255,255,255,0.45); letter-spacing: 4px; }
+  #song-end .btns { display: flex; gap: 12px; margin-top: 10px; }
+  #song-end button {
+    padding: 13px 28px; border-radius: 26px; font-size: 13px; letter-spacing: 3px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); color: #fff;
+  }
+  #song-end button.primary {
+    background: rgba(124,196,255,0.16); border-color: rgba(124,196,255,0.5); color: #a8d8ff;
+  }
 </style>
 </head>
 <body>
@@ -90,7 +138,18 @@
 </div>
 
 <button id="mood-toggle">氛围：空灵</button>
+<button id="song-btn">弹一首</button>
 <div id="tip">按住琴键横向划动 → 连奏</div>
+<canvas id="chart"></canvas>
+<div id="lyric"></div>
+<div id="song-end">
+  <div class="title">沧海一声笑</div>
+  <div class="sub">你弹完了</div>
+  <div class="btns">
+    <button id="again-btn" class="primary">再弹一次</button>
+    <button id="quit-btn">自由弹奏</button>
+  </div>
+</div>
 <div id="keys"></div>
 
 <script>
@@ -198,6 +257,7 @@ PENTATONIC.forEach((freq, i) => {
   const key = document.createElement('div');
   key.className = 'key';
   key.dataset.freq = freq;
+  key.dataset.idx = i; // 曲目模式判定要用键序号
   const dot = i === HIGH_DOT ? '<sup>·</sup>' : '';
   key.innerHTML = `<span class="label">${NOTE_NAMES[i]}${dot}</span>`;
   keysContainer.appendChild(key);
@@ -216,21 +276,24 @@ function handleTouch(e) {
 
     if (e.type === 'touchstart' && key) {
       activeTouches.set(t.identifier, key);
+      pressed.add(+key.dataset.idx); // 按住状态，供曲目模式做宽容判定
       activateKey(key);
     } else if (e.type === 'touchmove') {
       const prevKey = activeTouches.get(t.identifier);
       if (key && key !== prevKey) {
-        if (prevKey) deactivateKey(prevKey);
+        if (prevKey) { deactivateKey(prevKey); pressed.delete(+prevKey.dataset.idx); }
         activeTouches.set(t.identifier, key);
+        pressed.add(+key.dataset.idx);
         // 把来源键传进去，activateKey 据此判定这是"连奏"而不是"单击"
         activateKey(key, prevKey);
       } else if (!key && prevKey) {
         deactivateKey(prevKey);
+        pressed.delete(+prevKey.dataset.idx);
         activeTouches.delete(t.identifier);
       }
     } else if (e.type === 'touchend' || e.type === 'touchcancel') {
       const prevKey = activeTouches.get(t.identifier);
-      if (prevKey) deactivateKey(prevKey);
+      if (prevKey) { deactivateKey(prevKey); pressed.delete(+prevKey.dataset.idx); }
       activeTouches.delete(t.identifier);
     }
   }
@@ -244,6 +307,10 @@ const keyVoice = new WeakMap();
  * @param {Element|null} from  手指从哪个键滑过来的；有值即视为连奏
  */
 function activateKey(key, from = null) {
+  // 曲目模式下，每一次按键都送进判定。按错不惩罚，但判定必须发生在
+  // "是否已经 active" 的拦截之前，否则按住不放时后续音符就判不到了。
+  if (songState.active) songJudge(+key.dataset.idx);
+
   if (key.classList.contains('active')) return;
   key.classList.add('active');
 
@@ -253,7 +320,9 @@ function activateKey(key, from = null) {
     if (prev) prev.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.04);
   }
 
-  const voice = playNote(parseFloat(key.dataset.freq), from ? 'play' : 'air');
+  // 曲目模式一律用短尾音，否则旋律会糊成一片
+  const usePlay = from || songState.active;
+  const voice = playNote(parseFloat(key.dataset.freq), usePlay ? 'play' : 'air');
   if (voice) keyVoice.set(key, voice);
   spawnRipple(key);
 }
@@ -285,6 +354,7 @@ keysContainer.addEventListener('mousedown', e => {
   const key = e.target.closest('.key');
   if (!key) return;
   mouseKey = key;
+  pressed.add(+key.dataset.idx);
   activateKey(key);
 });
 keysContainer.addEventListener('mousemove', e => {
@@ -292,12 +362,18 @@ keysContainer.addEventListener('mousemove', e => {
   const key = e.target.closest('.key');
   if (key && key !== mouseKey) {
     deactivateKey(mouseKey);
+    pressed.delete(+mouseKey.dataset.idx);
     activateKey(key, mouseKey);
+    pressed.add(+key.dataset.idx);
     mouseKey = key;
   }
 });
 window.addEventListener('mouseup', () => {
-  if (mouseKey) { deactivateKey(mouseKey); mouseKey = null; }
+  if (mouseKey) {
+    deactivateKey(mouseKey);
+    pressed.delete(+mouseKey.dataset.idx);
+    mouseKey = null;
+  }
 });
 
 // ========== 氛围切换 ==========
@@ -308,6 +384,353 @@ moodBtn.addEventListener('click', () => {
   moodBtn.textContent = `氛围：${MOODS[MOOD_KEYS[currentMoodIdx]].label}`;
   startDrone();
 });
+
+// ========== 曲目模式（瀑布流引导） ==========
+// 设计原则：**无失败**。
+//   按对 → 键亮、音准、音符炸开；
+//   按错 → 只发出那个键本来的音（五声音阶怎么按都不难听），不扣分、不中断；
+//   漏掉 → 音符静静飘过，不弹错误提示。
+// 零基础用户要的是"我在弹一首歌"的确定感，任何扣分都会立刻打断这种幻觉。
+
+const KEY_COLORS = ['#64b4ff', '#82dcb4', '#ffc864', '#dc8cb4', '#b48cff', '#7cc4ff'];
+
+const SONGS = {
+  canghai: {
+    title: '沧海一声笑',
+    bpm: 66,
+    // [键序号, 起始拍, 时值(拍)]
+    // 键序号：0宫C4 1商D4 2角E4 3徵G4 4羽A4 5高音宫C5
+    // 简谱对照：1→0  2→1  3→2  5→3  6→4  1'→5
+    seq: [
+      // 一「沧海一声笑」  6 5 3 2 1
+      [4, 0, 1], [3, 1, 1], [2, 2, 1], [1, 3, 1], [0, 4, 2],
+      // 二「滔滔两岸潮」  3 2 1 6 5
+      //   原曲这两个音是低八度的，本乐器音域只到 C4，用同八度代替。
+      //   走向仍是连续下行，听感成立，只是少了八度落差。
+      [2, 6, 1], [1, 7, 1], [0, 8, 1], [4, 9, 1], [3, 10, 2],
+      // 三「浮沉随浪」  5 6 5 6 1'
+      //   原曲从这里往上爬到高音 5，中间还有 1 2 3 级进；
+      //   我们只保留"摇摆两下 + 冲到最高音宫"，把顶点交给 C5，
+      //   情绪顶点反而更清楚，也不用引入更高的键。
+      [3, 12, 1], [4, 13, 1], [3, 14, 1], [4, 15, 1], [5, 16, 2],
+      // 四「只记今朝」  6 5 3 2 1  从最高点一路落回宫，收束
+      [4, 18, 1], [3, 19, 1], [2, 20, 1], [1, 21, 1], [0, 22, 2],
+    ],
+    lyrics: [
+      { beat: 0,  text: '沧海一声笑' },
+      { beat: 6,  text: '滔滔两岸潮' },
+      { beat: 12, text: '浮沉随浪' },
+      { beat: 18, text: '只记今朝' },
+    ],
+  },
+};
+
+const FALL_SEC = 2.6;     // 音符从顶部落到判定线的时间
+const HIT_WINDOW = 0.26;  // 判定窗口 ±秒。音游常见 ±0.1，这里放宽一倍多，照顾零基础
+const HOLD_WINDOW = 0.09; // 按住不放时每帧的宽容判定
+
+const chartEl = document.getElementById('chart');
+const cctx = chartEl.getContext('2d');
+const lyricEl = document.getElementById('lyric');
+const songBtn = document.getElementById('song-btn');
+const songEndEl = document.getElementById('song-end');
+
+const songState = {
+  active: false, finished: false,
+  startTime: 0, endT: 0, spb: 1,
+  notes: [], fx: [], lyricIdx: 0,
+  song: null, raf: 0,
+};
+
+// 当前按住的键，用于"按住不放也算命中"的宽容判定
+const pressed = new Set();
+const geom = { W: 0, H: 0, judgeY: 0, keyW: 0, speed: 0 };
+
+function resizeChart() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  geom.W = window.innerWidth;
+  geom.H = window.innerHeight;
+  chartEl.width = Math.round(geom.W * dpr);
+  chartEl.height = Math.round(geom.H * dpr);
+  chartEl.style.width = geom.W + 'px';
+  chartEl.style.height = geom.H + 'px';
+  cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  geom.keyW = geom.W / PENTATONIC.length;
+  // 判定线放在键标签上方：手指自然落点在这里，而不是屏幕最底下
+  geom.judgeY = geom.H - Math.max(120, geom.H * 0.155);
+  geom.speed = geom.judgeY / FALL_SEC;
+}
+
+function startSong() {
+  if (!isAudioStarted) {
+    initAudio();
+    document.getElementById('overlay').classList.add('hidden');
+  }
+  const song = SONGS.canghai;
+  const spb = 60 / song.bpm;
+
+  songState.song = song;
+  songState.spb = spb;
+  songState.notes = song.seq.map(([k, beat, dur]) => ({
+    k, t: beat * spb, dur: dur * spb, hit: false, missed: false, hitAt: 0,
+  }));
+  songState.endT = Math.max(...songState.notes.map(n => n.t)) + 2.2;
+  // startTime 往后推一个下落时长，这样第一个音符从顶部出发、2.6s 后到达判定线
+  songState.startTime = performance.now() + FALL_SEC * 1000;
+  songState.active = true;
+  songState.finished = false;
+  songState.lyricIdx = 0;
+  songState.fx = [];
+  // 清掉上个模式残留的按住状态，否则进曲目时会白白送掉几个音符
+  pressed.clear();
+
+  resizeChart();
+  chartEl.classList.add('show');
+  songBtn.textContent = '结束';
+  songBtn.classList.add('on');
+  songEndEl.classList.remove('show');
+  lyricEl.classList.remove('show');
+  document.getElementById('tip').classList.remove('show');
+
+  // 第一次进来的人不知道要干什么，先给一句规则说明；
+  // 第一个乐句的歌词（提前 0.35s 触发）会自然把它顶掉
+  showLyric('跟着光点 · 碰线就按');
+
+  cancelAnimationFrame(songState.raf);
+  songState.raf = requestAnimationFrame(chartLoop);
+}
+
+function endSong() {
+  songState.active = false;
+  cancelAnimationFrame(songState.raf);
+  chartEl.classList.remove('show');
+  lyricEl.classList.remove('show');
+  songBtn.textContent = '弹一首';
+  songBtn.classList.remove('on');
+  pressed.clear();
+}
+
+function chartLoop() {
+  if (!songState.active) return;
+  // 不用 rAF 回调自带的时间戳：它在部分环境下（headless、虚拟时间）
+  // 与 performance.now() 不同源，会让音符位置整体偏移半个屏幕。
+  const elapsed = (performance.now() - songState.startTime) / 1000;
+  stepSong(elapsed);
+  drawChart(elapsed);
+  songState.raf = requestAnimationFrame(chartLoop);
+}
+
+function stepSong(elapsed) {
+  const notes = songState.notes;
+
+  // ① 按住不放也算命中：很多零基础用户会一直按着同一个键不撒手
+  if (pressed.size) {
+    for (const n of notes) {
+      if (n.hit) continue;
+      const dt = elapsed - n.t;
+      if (dt >= 0 && dt <= HOLD_WINDOW && pressed.has(n.k)) hitNote(n, elapsed);
+    }
+  }
+
+  // ② 超出窗口还没命中 → 标记飘过。不弹提示、不记 miss，只是淡出
+  for (const n of notes) {
+    if (!n.hit && !n.missed && elapsed > n.t + HIT_WINDOW) n.missed = true;
+  }
+
+  // ③ 乐句提示，提前 0.35s 淡入
+  const lys = songState.song.lyrics;
+  while (songState.lyricIdx < lys.length &&
+         elapsed >= lys[songState.lyricIdx].beat * songState.spb - 0.35) {
+    showLyric(lys[songState.lyricIdx].text);
+    songState.lyricIdx++;
+  }
+
+  // ④ 命中特效老化
+  songState.fx = songState.fx.filter(f => elapsed - f.t < 0.55);
+
+  // ⑤ 收尾
+  if (!songState.finished && elapsed > songState.endT) {
+    songState.finished = true;
+    setTimeout(() => { endSong(); songEndEl.classList.add('show'); }, 400);
+  }
+}
+
+function hitNote(n, elapsed) {
+  n.hit = true;
+  n.hitAt = elapsed;
+  songState.fx.push({ k: n.k, t: elapsed });
+}
+
+function songJudge(keyIdx) {
+  if (!songState.active || songState.finished) return;
+  const elapsed = (performance.now() - songState.startTime) / 1000;
+  let best = null, bestDt = Infinity;
+  for (const n of songState.notes) {
+    if (n.hit || n.k !== keyIdx) continue;
+    const dt = Math.abs(n.t - elapsed);
+    if (dt < bestDt) { bestDt = dt; best = n; }
+  }
+  if (best && bestDt <= HIT_WINDOW) hitNote(best, elapsed);
+}
+
+let lyricTimer = 0;
+function showLyric(text) {
+  lyricEl.textContent = text;
+  lyricEl.classList.add('show');
+  clearTimeout(lyricTimer);
+  lyricTimer = setTimeout(() => lyricEl.classList.remove('show'), 3400);
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function drawChart(elapsed) {
+  const { W, H, judgeY, keyW, speed } = geom;
+  const c = cctx;
+  const nKeys = PENTATONIC.length;
+  c.clearRect(0, 0, W, H);
+
+  // 每个键离"最近的一个待弹音符"还有多久，决定轨道亮度
+  const near = new Array(nKeys).fill(Infinity);
+  for (const n of songState.notes) {
+    if (n.hit) continue;
+    const d = Math.abs(n.t - elapsed);
+    if (d < near[n.k]) near[n.k] = d;
+  }
+
+  // 轨道：极淡竖线，帮用户对准横向位置
+  c.save();
+  c.strokeStyle = '#ffffff';
+  c.lineWidth = 1;
+  for (let i = 0; i < nKeys; i++) {
+    c.globalAlpha = 0.05;
+    c.beginPath();
+    c.moveTo((i + 0.5) * keyW, 0);
+    c.lineTo((i + 0.5) * keyW, judgeY);
+    c.stroke();
+  }
+  c.restore();
+
+  // 命中后的余晖，用来让光柱在命中瞬间不"啪"地消失
+  const hitGlow = new Array(nKeys).fill(0);
+  for (const f of songState.fx) {
+    const age = elapsed - f.t;
+    if (age >= 0 && age < 0.4) {
+      hitGlow[f.k] = Math.max(hitGlow[f.k], 1 - age / 0.4);
+    }
+  }
+
+  // 判定线：每键一段，音符接近时变亮变粗
+  for (let i = 0; i < nKeys; i++) {
+    const x = (i + 0.5) * keyW;
+    const half = keyW * 0.31;
+    const glow = Math.max(0, 1 - near[i] / 0.8);
+    const beam = Math.max(glow, hitGlow[i] * 0.85);
+
+    // 接近时的光柱，这是"现在按这里"最强的引导。
+    // 用垂直拉长的椭圆径向渐变，水平垂直两个方向都柔和，不会像色块。
+    if (beam > 0.02) {
+      c.save();
+      c.globalAlpha = beam * 0.5;
+      c.translate(x, judgeY);
+      c.scale(1, 2.4);
+      const r = keyW * 0.42;
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, r);
+      g.addColorStop(0, KEY_COLORS[i]);
+      g.addColorStop(0.45, KEY_COLORS[i] + 'aa');
+      g.addColorStop(1, KEY_COLORS[i] + '00');
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(0, 0, r, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    }
+
+    c.save();
+    c.globalAlpha = 0.24 + Math.max(glow, hitGlow[i]) * 0.68;
+    c.strokeStyle = KEY_COLORS[i];
+    c.lineWidth = 2.2 + glow * 2.5;
+    c.beginPath();
+    c.moveTo(x - half, judgeY);
+    c.lineTo(x + half, judgeY);
+    c.stroke();
+    c.restore();
+  }
+
+  // 下落音符
+  for (const n of songState.notes) {
+    if (n.hit) continue;
+    const y = judgeY - (n.t - elapsed) * speed;
+    if (y < -60 || y > H + 60) continue;
+
+    let alpha = 1;
+    if (n.missed) {
+      // 飘过时快速淡掉：0.36s 内消失，避免落到键标签上糊成一片
+      alpha = 0.5 - (elapsed - n.t - HIT_WINDOW) * 1.4;
+      if (alpha <= 0.01) continue;
+    }
+    drawNote(c, (n.k + 0.5) * keyW, y, keyW, KEY_COLORS[n.k], alpha);
+  }
+
+  // 命中特效：向外扩散的圆环
+  for (const f of songState.fx) {
+    const age = elapsed - f.t;
+    const p = age / 0.55;
+    if (p < 0 || p > 1) continue;
+    const x = (f.k + 0.5) * keyW;
+    c.save();
+    c.globalAlpha = (1 - p) * 0.85;
+    c.strokeStyle = KEY_COLORS[f.k];
+    c.lineWidth = 3.2 * (1 - p) + 0.4;
+    c.beginPath();
+    c.arc(x, judgeY, 10 + p * keyW * 0.62, 0, Math.PI * 2);
+    c.stroke();
+    c.restore();
+  }
+}
+
+function drawNote(c, x, y, keyW, color, alpha) {
+  const w = keyW * 0.5;
+  const h = 26;
+  c.save();
+  c.globalAlpha = alpha;
+  c.shadowColor = color;
+  c.shadowBlur = 18;
+  c.fillStyle = color;
+  roundRect(c, x - w / 2, y - h / 2, w, h, h / 2);
+  c.fill();
+
+  // 顶部高光，让方块有体积感
+  c.shadowBlur = 0;
+  c.globalAlpha = alpha * 0.5;
+  c.fillStyle = '#ffffff';
+  roundRect(c, x - w / 2 + 4, y - h / 2 + 4, w - 8, h * 0.3, h * 0.15);
+  c.fill();
+  c.restore();
+}
+
+// ========== 曲目模式接线 ==========
+songBtn.addEventListener('click', () => {
+  if (songState.active) { endSong(); songEndEl.classList.remove('show'); }
+  else startSong();
+});
+
+document.getElementById('again-btn').addEventListener('click', () => {
+  songEndEl.classList.remove('show');
+  startSong();
+});
+document.getElementById('quit-btn').addEventListener('click', () => {
+  songEndEl.classList.remove('show');
+});
+
+window.addEventListener('resize', () => { if (songState.active) resizeChart(); });
 
 // ========== 启动入口 ==========
 function showTip() {
