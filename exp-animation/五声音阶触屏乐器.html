@@ -45,6 +45,11 @@
   .key:nth-child(3) { --glow: rgba(255,200,100,0.15); --color: #ffc864; }
   .key:nth-child(4) { --glow: rgba(220,140,180,0.15); --color: #dc8cb4; }
   .key:nth-child(5) { --glow: rgba(180,140,255,0.15); --color: #b48cff; }
+  /* 第 6 键是高八度的宫，沿用第 1 键的蓝，视觉上形成一次音阶循环 */
+  .key:nth-child(6) { --glow: rgba(100,180,255,0.18); --color: #7cc4ff; }
+
+  /* 高音标记：简谱在数字上方加点，这里用 sup 模拟 */
+  .key .label sup { font-size: 9px; vertical-align: super; opacity: 0.65; margin-left: 1px; }
 
   /* 涟漪反馈 */
   .ripple {
@@ -64,6 +69,17 @@
     letter-spacing: 2px; cursor: pointer; backdrop-filter: blur(8px);
   }
   #mood-toggle:active { background: rgba(255,255,255,0.15); }
+
+  /* 首次进入的操作提示，5 秒后自动隐去 */
+  #tip {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    padding: 9px 20px; border-radius: 18px; white-space: nowrap;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.72); font-size: 13px; letter-spacing: 1px;
+    opacity: 0; transition: opacity 0.8s; pointer-events: none; z-index: 40;
+    backdrop-filter: blur(6px);
+  }
+  #tip.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -74,15 +90,21 @@
 </div>
 
 <button id="mood-toggle">氛围：空灵</button>
+<div id="tip">按住琴键横向划动 → 连奏</div>
 <div id="keys"></div>
 
 <script>
 // ========== 音频引擎 ==========
-const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00]; // C D E G A
+// 五声音阶（宫商角徵羽）+ 高八度的宫，共 6 键。
+// 加第 6 键是为了让《茉莉花》那类需要高音 do 的曲子能弹下来。
+const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // C4 D4 E4 G4 A4 C5
 const MOODS = {
-  ethereal: { label: '空灵', droneFreqs: [130.81, 196.00], filterFreq: 800, decay: 2.5 },
-  warm:     { label: '温暖', droneFreqs: [130.81, 164.81], filterFreq: 1200, decay: 1.8 },
-  dark:     { label: '幽深', droneFreqs: [110.00, 164.81], filterFreq: 500, decay: 3.0 },
+  // decay     —— 单击时的长尾音，负责空间感
+  // playDecay —— 滑音时的短尾音，负责旋律清晰度。尾音必须明显短于按键间隔，
+  //              否则相邻音在频率上互相掩蔽，听起来只有一团嗡鸣，听不出调子。
+  ethereal: { label: '空灵', droneFreqs: [130.81, 196.00], filterFreq: 800,  decay: 2.5, playDecay: 0.42 },
+  warm:     { label: '温暖', droneFreqs: [130.81, 164.81], filterFreq: 1200, decay: 1.8, playDecay: 0.42 },
+  dark:     { label: '幽深', droneFreqs: [110.00, 164.81], filterFreq: 500,  decay: 3.0, playDecay: 0.46 },
 };
 const MOOD_KEYS = Object.keys(MOODS);
 
@@ -128,38 +150,56 @@ function stopDrone() {
   droneOscs = [];
 }
 
-function playNote(freq) {
-  if (!ctx) return;
+/**
+ * 发声。
+ * @param {number} freq 频率
+ * @param {'air'|'play'} mode
+ *   air  —— 单击：长尾音，空间感强，适合氛围聆听
+ *   play —— 滑音：短尾音 + 快起音 + 更亮的滤波起点，让一串音前后分明
+ */
+function playNote(freq, mode = 'air') {
+  if (!ctx) return null;
   const mood = MOODS[MOOD_KEYS[currentMoodIdx]];
+  const isPlay = mode === 'play';
+  const decay = isPlay ? mood.playDecay : mood.decay;
+  const attack = isPlay ? 0.006 : 0.02;
+  const peak = isPlay ? 0.30 : 0.35;
+
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
 
   osc.type = 'triangle';
   osc.frequency.value = freq;
+
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(mood.filterFreq * 2, ctx.currentTime);
-  filter.frequency.exponentialRampToValueAtTime(mood.filterFreq * 0.5, ctx.currentTime + mood.decay);
   filter.Q.value = 2;
+  // 滑音时滤波起点抬高，音头更"脆"，连续五个音才分得开
+  filter.frequency.setValueAtTime(mood.filterFreq * (isPlay ? 3.2 : 2), ctx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(mood.filterFreq * 0.5, ctx.currentTime + decay);
 
   gain.gain.setValueAtTime(0, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + mood.decay);
+  gain.gain.linearRampToValueAtTime(peak, ctx.currentTime + attack);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + decay);
 
   osc.connect(filter).connect(gain).connect(masterGain);
   osc.start();
-  osc.stop(ctx.currentTime + mood.decay + 0.1);
+  osc.stop(ctx.currentTime + decay + 0.1);
+
+  return { osc, gain, filter };
 }
 
 // ========== UI 构建 ==========
-const NOTE_NAMES = ['宫', '商', '角', '徵', '羽'];
+const NOTE_NAMES = ['宫', '商', '角', '徵', '羽', '宫'];
+const HIGH_DOT = 5; // 第 6 键是高八度的宫，按简谱习惯在右上角加高音点
 const keysContainer = document.getElementById('keys');
 
 PENTATONIC.forEach((freq, i) => {
   const key = document.createElement('div');
   key.className = 'key';
   key.dataset.freq = freq;
-  key.innerHTML = `<span class="label">${NOTE_NAMES[i]}</span>`;
+  const dot = i === HIGH_DOT ? '<sup>·</sup>' : '';
+  key.innerHTML = `<span class="label">${NOTE_NAMES[i]}${dot}</span>`;
   keysContainer.appendChild(key);
 });
 
@@ -182,7 +222,8 @@ function handleTouch(e) {
       if (key && key !== prevKey) {
         if (prevKey) deactivateKey(prevKey);
         activeTouches.set(t.identifier, key);
-        activateKey(key);
+        // 把来源键传进去，activateKey 据此判定这是"连奏"而不是"单击"
+        activateKey(key, prevKey);
       } else if (!key && prevKey) {
         deactivateKey(prevKey);
         activeTouches.delete(t.identifier);
@@ -195,10 +236,25 @@ function handleTouch(e) {
   }
 }
 
-function activateKey(key) {
+// 记录每个键最近一次发声的节点引用，滑走时用来快速收掉长尾音
+const keyVoice = new WeakMap();
+
+/**
+ * @param {Element} key        要触发的键
+ * @param {Element|null} from  手指从哪个键滑过来的；有值即视为连奏
+ */
+function activateKey(key, from = null) {
   if (key.classList.contains('active')) return;
   key.classList.add('active');
-  playNote(parseFloat(key.dataset.freq));
+
+  // 连奏时先收掉上一个音的长尾，否则 2.5s 的余音会盖住后面的旋律
+  if (from && ctx) {
+    const prev = keyVoice.get(from);
+    if (prev) prev.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.04);
+  }
+
+  const voice = playNote(parseFloat(key.dataset.freq), from ? 'play' : 'air');
+  if (voice) keyVoice.set(key, voice);
   spawnRipple(key);
 }
 
@@ -222,13 +278,26 @@ keysContainer.addEventListener('touchmove', handleTouch, { passive: false });
 keysContainer.addEventListener('touchend', handleTouch, { passive: false });
 keysContainer.addEventListener('touchcancel', handleTouch, { passive: false });
 
-// 鼠标兼容（桌面调试用）
+// 鼠标兼容（桌面调试用，同样支持按住拖动连奏）
+let mouseKey = null;
+
 keysContainer.addEventListener('mousedown', e => {
   const key = e.target.closest('.key');
-  if (key) { activateKey(key); key._mouseDown = true; }
+  if (!key) return;
+  mouseKey = key;
+  activateKey(key);
+});
+keysContainer.addEventListener('mousemove', e => {
+  if (!mouseKey) return;
+  const key = e.target.closest('.key');
+  if (key && key !== mouseKey) {
+    deactivateKey(mouseKey);
+    activateKey(key, mouseKey);
+    mouseKey = key;
+  }
 });
 window.addEventListener('mouseup', () => {
-  document.querySelectorAll('.key.active').forEach(k => { if (k._mouseDown) deactivateKey(k); });
+  if (mouseKey) { deactivateKey(mouseKey); mouseKey = null; }
 });
 
 // ========== 氛围切换 ==========
@@ -241,9 +310,17 @@ moodBtn.addEventListener('click', () => {
 });
 
 // ========== 启动入口 ==========
+function showTip() {
+  const tip = document.getElementById('tip');
+  if (!tip) return;
+  tip.classList.add('show');
+  setTimeout(() => tip.classList.remove('show'), 5200);
+}
+
 document.getElementById('start-btn').addEventListener('click', () => {
   initAudio();
   document.getElementById('overlay').classList.add('hidden');
+  showTip();
 });
 </script>
 </body>
