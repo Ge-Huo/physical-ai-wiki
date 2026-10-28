@@ -17,6 +17,7 @@
   - [交互式物理动画演示](exp-animation/README.md)
     - [弹簧振子实验](exp-animation/interactive-animation.md)
     - [机械波实验](exp-animation/mechanical-wave.md)
+    - [驻波数值仿真](exp-animation/驻波.md)
   - [手机口袋实验演示](exp-animation/README.md)
     - [加速度实验](exp-animation/accelerometer-experiment-with-mobile-phones.md)
     - [迷宫实验](exp-animation/migong.md)
