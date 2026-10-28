@@ -101,12 +101,34 @@
     background: rgba(124,196,255,0.12);
   }
 
-  /* 乐句提示，随小节切换 */
+  /* 下落速度档位：只在下落谱面出现时才需要，自由弹奏时藏起来。
+     放在「弹一首」下面第二行，避免在 375px 窄屏上和右上角的氛围按钮撞车。 */
+  #speed {
+    position: fixed; z-index: 50;
+    top: calc(max(env(safe-area-inset-top, 12px), 12px) + 42px); left: 16px;
+    display: flex; gap: 2px; padding: 3px; border-radius: 20px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(8px);
+    opacity: 0; pointer-events: none; transition: opacity 0.35s;
+  }
+  #speed.show { opacity: 1; pointer-events: auto; }
+  #speed button {
+    padding: 6px 11px; border: 0; border-radius: 16px; background: transparent;
+    color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 1px;
+    cursor: pointer; transition: color 0.2s, background 0.2s;
+  }
+  #speed button.on { color: #a8d8ff; background: rgba(124,196,255,0.16); }
+
+  /* 乐句提示，随小节切换。
+     top 从 9% 挪到 12%：给左上角的速度档位让出高度，否则 375px 窄屏上会叠在一起。
+     加一层半透明底：音符从顶部下落时会穿过这一带，纯文字压上去读不清。 */
   #lyric {
-    position: fixed; left: 50%; top: 9%; transform: translateX(-50%);
-    font-size: 19px; letter-spacing: 7px; color: rgba(255,255,255,0.8);
+    position: fixed; left: 50%; top: 12%; transform: translateX(-50%);
+    font-size: 19px; letter-spacing: 7px; color: rgba(255,255,255,0.85);
+    padding: 5px 20px 5px 26px; border-radius: 20px;
+    background: rgba(10,10,18,0.5); backdrop-filter: blur(6px);
     opacity: 0; transition: opacity 0.7s; pointer-events: none; z-index: 35;
-    text-shadow: 0 0 24px rgba(124,196,255,0.45); white-space: nowrap;
+    text-shadow: 0 0 24px rgba(124,196,255,0.55); white-space: nowrap;
   }
   #lyric.show { opacity: 1; }
 
@@ -139,6 +161,11 @@
 
 <button id="mood-toggle">氛围：空灵</button>
 <button id="song-btn">弹一首</button>
+<div id="speed">
+  <button data-i="0">慢</button>
+  <button data-i="1">标准</button>
+  <button data-i="2">快</button>
+</div>
 <div id="tip">按住琴键横向划动 → 连奏</div>
 <canvas id="chart"></canvas>
 <div id="lyric"></div>
@@ -425,9 +452,21 @@ const SONGS = {
   },
 };
 
-const FALL_SEC = 2.6;     // 音符从顶部落到判定线的时间
-const HIT_WINDOW = 0.26;  // 判定窗口 ±秒。音游常见 ±0.1，这里放宽一倍多，照顾零基础
+// 下落速度三档。sec = 音符从屏幕顶部落到判定线所用秒数，win = 判定窗口 ±秒。
+// 两者必须成对出现：速度越快，视觉上留给你反应的时间越短，
+// 如果判定窗口不变，快档会变成"看得见但按不准"，让人误以为是自己手残。
+// 所以快档同步收紧窗口，让"难"体现在节奏上，而不是判定的随机性上。
+const FALL_PRESETS = [
+  { id: 'slow', label: '慢',   sec: 2.2, win: 0.24 },
+  { id: 'std',  label: '标准', sec: 1.7, win: 0.21 },
+  { id: 'fast', label: '快',   sec: 1.2, win: 0.17 },
+];
 const HOLD_WINDOW = 0.09; // 按住不放时每帧的宽容判定
+
+// 当前档位。用 let：切换时要能改，且要写回 localStorage
+const FALL_KEY = 'wuyin.fall';
+let fallPreset = FALL_PRESETS[1];   // 默认"标准" 1.7s
+let hitWindow = fallPreset.win;     // 判定窗口，随档位联动
 
 const chartEl = document.getElementById('chart');
 const cctx = chartEl.getContext('2d');
@@ -458,7 +497,7 @@ function resizeChart() {
   geom.keyW = geom.W / PENTATONIC.length;
   // 判定线放在键标签上方：手指自然落点在这里，而不是屏幕最底下
   geom.judgeY = geom.H - Math.max(120, geom.H * 0.155);
-  geom.speed = geom.judgeY / FALL_SEC;
+  geom.speed = geom.judgeY / fallPreset.sec;
 }
 
 function startSong() {
@@ -475,8 +514,8 @@ function startSong() {
     k, t: beat * spb, dur: dur * spb, hit: false, missed: false, hitAt: 0,
   }));
   songState.endT = Math.max(...songState.notes.map(n => n.t)) + 2.2;
-  // startTime 往后推一个下落时长，这样第一个音符从顶部出发、2.6s 后到达判定线
-  songState.startTime = performance.now() + FALL_SEC * 1000;
+  // startTime 往后推一个下落时长，这样第一个音符从顶部出发、正好 sec 秒后到达判定线
+  songState.startTime = performance.now() + fallPreset.sec * 1000;
   songState.active = true;
   songState.finished = false;
   songState.lyricIdx = 0;
@@ -486,6 +525,7 @@ function startSong() {
 
   resizeChart();
   chartEl.classList.add('show');
+  speedEl.classList.add('show');
   songBtn.textContent = '结束';
   songBtn.classList.add('on');
   songEndEl.classList.remove('show');
@@ -504,6 +544,7 @@ function endSong() {
   songState.active = false;
   cancelAnimationFrame(songState.raf);
   chartEl.classList.remove('show');
+  speedEl.classList.remove('show');
   lyricEl.classList.remove('show');
   songBtn.textContent = '弹一首';
   songBtn.classList.remove('on');
@@ -534,7 +575,7 @@ function stepSong(elapsed) {
 
   // ② 超出窗口还没命中 → 标记飘过。不弹提示、不记 miss，只是淡出
   for (const n of notes) {
-    if (!n.hit && !n.missed && elapsed > n.t + HIT_WINDOW) n.missed = true;
+    if (!n.hit && !n.missed && elapsed > n.t + hitWindow) n.missed = true;
   }
 
   // ③ 乐句提示，提前 0.35s 淡入
@@ -570,7 +611,7 @@ function songJudge(keyIdx) {
     const dt = Math.abs(n.t - elapsed);
     if (dt < bestDt) { bestDt = dt; best = n; }
   }
-  if (best && bestDt <= HIT_WINDOW) hitNote(best, elapsed);
+  if (best && bestDt <= hitWindow) hitNote(best, elapsed);
 }
 
 let lyricTimer = 0;
@@ -673,7 +714,7 @@ function drawChart(elapsed) {
     let alpha = 1;
     if (n.missed) {
       // 飘过时快速淡掉：0.36s 内消失，避免落到键标签上糊成一片
-      alpha = 0.5 - (elapsed - n.t - HIT_WINDOW) * 1.4;
+      alpha = 0.5 - (elapsed - n.t - hitWindow) * 1.4;
       if (alpha <= 0.01) continue;
     }
     drawNote(c, (n.k + 0.5) * keyW, y, keyW, KEY_COLORS[n.k], alpha);
@@ -717,6 +758,31 @@ function drawNote(c, x, y, keyW, color, alpha) {
 }
 
 // ========== 曲目模式接线 ==========
+const speedEl = document.getElementById('speed');
+const speedBtns = Array.from(speedEl.querySelectorAll('button'));
+
+// 切换下落档位。sec 改变的是"像素/秒"，时间轴本身不动，
+// 所以曲目中切档时音符会整体跳一下位置，但不会错拍。
+function setFall(idx, persist = true) {
+  const i = (idx >= 0 && idx < FALL_PRESETS.length) ? idx : 1;
+  fallPreset = FALL_PRESETS[i];
+  hitWindow = fallPreset.win;
+  speedBtns.forEach((b, j) => b.classList.toggle('on', j === i));
+  if (songState.active) geom.speed = geom.judgeY / fallPreset.sec;
+  if (persist) { try { localStorage.setItem(FALL_KEY, fallPreset.id); } catch (e) {} }
+}
+
+speedBtns.forEach(b => b.addEventListener('click', () => setFall(Number(b.dataset.i))));
+
+// 恢复上次选的档位：手感这东西一次调好就不该每次都重调
+try {
+  const saved = localStorage.getItem(FALL_KEY);
+  const i = FALL_PRESETS.findIndex(p => p.id === saved);
+  setFall(i >= 0 ? i : 1, false);
+} catch (e) {
+  setFall(1, false);
+}
+
 songBtn.addEventListener('click', () => {
   if (songState.active) { endSong(); songEndEl.classList.remove('show'); }
   else startSong();
