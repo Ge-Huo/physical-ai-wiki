@@ -374,6 +374,25 @@
     border-color: rgba(124,196,255,0.7); background: rgba(124,196,255,0.26);
     color: #e2f2ff;
   }
+  /* 示范速度：慢 / 标准 / 快。单独一行小药丸，不跟上面三个功能键混排——
+     混排后一行放四个，11px 字号在 320px 宽的手机上会挤成两行反而更占地方。 */
+  #follow .f-speeds {
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px; margin-top: 8px;
+  }
+  #follow .f-speeds .lbl {
+    font-size: 9.5px; letter-spacing: 1px; color: rgba(255,255,255,0.3);
+    margin-right: 2px;
+  }
+  #follow .f-speeds button {
+    padding: 4px 11px; border-radius: 11px;
+    border: 1px solid rgba(255,255,255,0.14); background: transparent;
+    color: rgba(255,255,255,0.45); font-size: 10.5px; letter-spacing: 1px; cursor: pointer;
+  }
+  #follow .f-speeds button.on {
+    border-color: rgba(124,196,255,0.62); background: rgba(124,196,255,0.2);
+    color: #dcefff;
+  }
 
   /* ===== 键位发光提示（跟弹模式核心引导）=====
      下一个要弹的键直接呼吸发亮，颜色用键自己的专属色。
@@ -457,6 +476,10 @@
   body.land #follow .f-hint { margin-top: 8px; font-size: 10px; letter-spacing: 1.5px; }
   body.land #follow .f-acts { margin-top: 9px; gap: 6px; }
   body.land #follow .f-acts button { padding: 6px 8px; font-size: 10.5px; letter-spacing: 0.5px; }
+  /* 横屏高度只有 390px，速度药丸再矮一档，别把面板顶出滚动条 */
+  body.land #follow .f-speeds { margin-top: 6px; gap: 5px; }
+  body.land #follow .f-speeds button { padding: 3px 9px; font-size: 9.5px; }
+  body.land #follow .f-speeds .lbl { font-size: 9px; letter-spacing: 0.5px; }
 
   /* 选曲面板：横屏高度只有 390px，单列只能露 3 张卡，改两列一屏放下 5 首；
      卡片同步压矮，否则两列省下的高度又被行高吃掉、还是会冒滚动条 */
@@ -516,6 +539,12 @@
     <button class="f-beat">节拍 · 关</button>
     <button class="f-master">全曲示范</button>
     <button class="f-demo">再看演示</button>
+  </div>
+  <div class="f-speeds">
+    <span class="lbl">示范速度</span>
+    <button>慢</button>
+    <button>标准</button>
+    <button>快</button>
   </div>
 </div>
 <div id="song-panel">
@@ -1227,6 +1256,51 @@ let beatOn = false;
 try { beatOn = localStorage.getItem(BEAT_KEY) === '1'; } catch (e) {}
 const beatState = { timer: 0, flashTimer: 0, el: null };
 
+/* ===== 示范速度：慢 / 标准 / 快 =====
+   原来示范直接拿曲子的 bpm 当"每音一拍"，听着明显比唱片慢一大截：
+   五线/简谱上这些旋律音多是八分音符的流动感，谱子当年按"每音一拍 + 句末两拍"简化了，
+   于是把音距拉长了一倍。这里按曲速等比放大（保住每首歌自己的性子：沧海慢、兔子快），
+   三档分别对应「跟练 / 唱片里听到的 / 炫技」。 */
+const DEMO_SPEEDS = [
+  { id: 'slow', label: '慢',   boost: 1.00 },
+  { id: 'std',  label: '标准', boost: 1.30 },
+  { id: 'fast', label: '快',   boost: 1.62 },
+];
+const DEMO_SPEED_KEY = 'wuyin.demoSp';
+let demoSpIdx = 1;   // 默认「标准」：第一次听就该是熟悉的那个速度
+try {
+  const i = DEMO_SPEEDS.findIndex(s => s.id === localStorage.getItem(DEMO_SPEED_KEY));
+  if (i >= 0) demoSpIdx = i;
+} catch (e) {}
+
+// 每音时长（ms）。夹在 380~950：低于 380 听着像打字机，高于 950 就散成一个个孤点，
+// 两种都失去"一句旋律"的连贯感（这也是「多少拍速才有音乐感」那组数的边界）。
+function demoNoteMs(song) {
+  const ms = 60000 / song.bpm / DEMO_SPEEDS[demoSpIdx].boost;
+  return Math.max(380, Math.min(950, ms));
+}
+
+// 注意变量名带 demo 前缀：下面瀑布流速度档也叫 speedBtns（那三个是「下落速度」），
+// 两个都用 const 声明，重名会直接 SyntaxError 把整页脚本干掉。
+const demoSpeedBtns = Array.from(followEl.querySelectorAll('.f-speeds button'));
+function syncDemoSpeedBtns() {
+  demoSpeedBtns.forEach((b, i) => b.classList.toggle('on', i === demoSpIdx));
+}
+demoSpeedBtns.forEach((b, i) => {
+  b.addEventListener('click', () => {
+    if (i === demoSpIdx) return;
+    demoSpIdx = i;
+    try { localStorage.setItem(DEMO_SPEED_KEY, DEMO_SPEEDS[i].id); } catch (e) {}
+    syncDemoSpeedBtns();
+    // 正在放示范就换速重来：比"下次生效"更符合直觉，也免得点了像没反应
+    if (demoState.playing) {
+      if (demoState.full) { finishMasterDemo(true); startMasterDemo(); }
+      else { finishDemo(true); startDemo(); }
+    }
+  });
+});
+syncDemoSpeedBtns();
+
 function stopDemoTimers() {
   demoState.timers.forEach(clearTimeout);
   demoState.timers = [];
@@ -1247,7 +1321,8 @@ function startDemo() {
   followEl.querySelector('.f-hint').textContent = '先看一遍：注意哪个键在亮';
 
   const song = song0;
-  const spb = 60 / song.bpm;
+  // 每音时长由「示范速度」决定，不再直接用 bpm（见 DEMO_SPEEDS 处的说明）
+  const noteMs = demoNoteMs(song);
   // seq 第 i 个音对应第几个乐句的第几个音，演示时简谱条跟着走到那个位置
   const posMap = [];
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
@@ -1274,12 +1349,12 @@ function startDemo() {
       demoState.timers.push(setTimeout(() => {
         if (!demoState.playing) return;
         key.classList.remove('demo-hit');
-      }, Math.min(dur * spb * 0.72, 0.55) * 1000));
-    }, beat * spb * 1000 + 300));   // 300ms 起始缓冲，让界面先落定
+      }, Math.min(dur * noteMs * 0.72, 550)));
+    }, beat * noteMs + 300));   // 300ms 起始缓冲，让界面先落定
   });
 
   const last = demoSeq[demoSeq.length - 1];
-  const total = (last[1] + last[2]) * spb * 1000 + 300 + 250;
+  const total = (last[1] + last[2]) * noteMs + 300 + 250;
   demoState.timers.push(setTimeout(() => {
     if (demoState.playing) finishDemo(false);
   }, total));
@@ -1328,7 +1403,8 @@ function startMasterDemo() {
   masterBtn.textContent = '停止';
   masterBtn.classList.add('on');
 
-  const spb = 60 / song.bpm;
+  // 每音时长由「示范速度」决定（慢/标准/快），曲子的 bpm 只用来定"这首该多快"的基准
+  const noteMs = demoNoteMs(song);
   const posMap = [];
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
 
@@ -1338,8 +1414,9 @@ function startMasterDemo() {
     const isFirst = ni === 0;
     const isLast = dur > 1;
     const human = 1 + 0.014 * Math.sin(i * 1.7) + (isLast ? 0.05 : 0);
+    const ms = dur * noteMs * human;
     const at = 300 + t;
-    t += dur * spb * 1000 * human;
+    t += ms;
 
     demoState.timers.push(setTimeout(() => {
       if (!demoState.playing) return;
@@ -1355,12 +1432,12 @@ function startMasterDemo() {
       demoState.timers.push(setTimeout(() => {
         if (!demoState.playing) return;
         key.classList.remove('demo-hit');
-      }, Math.min(dur * spb * 0.72, 0.6) * 1000));
+      }, Math.min(ms * 0.72, 600)));
     }, at));
   });
 
   followEl.querySelector('.f-hint').textContent =
-    `全曲示范 · 约 ${Math.round(t / 1000)} 秒 · 随时可停`;
+    `全曲示范 · ${DEMO_SPEEDS[demoSpIdx].label}速 · 每音 ${(noteMs / 1000).toFixed(2)} 秒 · 约 ${Math.round(t / 1000)} 秒`;
 
   demoState.timers.push(setTimeout(() => {
     if (demoState.playing) finishMasterDemo(false);
