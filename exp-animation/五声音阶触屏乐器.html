@@ -86,6 +86,17 @@
   }
   #mood-toggle:active { background: rgba(255,255,255,0.15); }
 
+  /* 横屏开关：手机开了「竖屏锁定」时系统不会转屏，网页也没权限强制转，
+     所以给一个按钮自己把舞台转 90°。真横屏时 JS 会把它藏起来（那时它没意义）。 */
+  #rot-toggle {
+    position: fixed; z-index: 50;
+    top: calc(max(env(safe-area-inset-top, 12px), 12px) + 42px); right: 16px;
+    padding: 8px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px;
+    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6); font-size: 12px;
+    letter-spacing: 2px; cursor: pointer; backdrop-filter: blur(8px);
+  }
+  #rot-toggle:active { background: rgba(255,255,255,0.15); }
+
   /* 首次进入的操作提示，5 秒后自动隐去 */
   #tip {
     position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
@@ -98,13 +109,16 @@
   #tip.show { opacity: 1; }
 
   /* ===== 瀑布流谱面 ===== */
-  /* 画布由 JS 定位到"琴键区"的实际矩形（竖屏=全屏，横屏=右半边），
-     所以这里只锚左上角，left/top/width/height 全部交给 resizeChart 写入 */
+  /* 画布与琴键区严格同框：竖屏、自由弹奏、瀑布流都满屏；横屏读谱时让出左栏。
+     这里刻意用纯 CSS 对齐而不是让 JS 写 left/top/width/height——
+     手动横屏时整个 body 被 rotate(90deg)，getBoundingClientRect 会返回旋转后的
+     包围盒（宽高互换），JS 量出来的坐标全是错的；交给 CSS 就完全绕开这个坑。 */
   #chart {
-    position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none;
-    opacity: 0; transition: opacity 0.45s;
+    position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+    z-index: 30; pointer-events: none; opacity: 0; transition: opacity 0.45s;
   }
   #chart.show { opacity: 1; }
+  body.land.sheet-mode #chart { left: var(--col); width: calc(100% - var(--col)); }
 
   /* 曲目按钮，放左上角与右侧的氛围按钮分开 */
   #song-btn {
@@ -320,54 +334,73 @@
   .key.pulse .label b,
   .key.demo-hit .label b { opacity: 1; text-shadow: 0 0 18px currentColor; }
 
-  /* ===== 横屏：左侧谱面栏 + 右侧琴键 =====
+  /* ===== 横屏布局：左侧谱面栏 + 右侧琴键 =====
      竖屏保持原样（谱面浮在琴键上方，键铺满整屏）。
      横屏高度只有 320~430px，谱面若仍浮在琴键上会盖住 1~2 个键、那几个键就按不到了，
      所以读谱时改成左右分栏：左边读谱、右边弹奏，互不遮挡；琴键仍是竖向长条，手感不变。
-     自由弹奏和瀑布流不读谱，就保持满屏琴键（body 没有 sheet-mode 时）。 */
-  @media (orientation: landscape) {
-    body.sheet-mode #keys {
-      width: calc(100% - var(--col));
-      margin-left: var(--col);
-    }
-    .key { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
-    .key .label { margin-bottom: 8px; }
-    .key .label b { font-size: 17px; }
-    .key .label i { font-size: 10px; }
+     自由弹奏和瀑布流不读谱，就保持满屏琴键（body 没有 sheet-mode 时）。
 
-    /* 「氛围」跟着谱面栏走，免得浮在琴键上误触（自由弹奏时它还在右上角） */
-    body.sheet-mode #mood-toggle { left: auto; right: calc(100% - var(--col) + 12px); }
+     这里不用 @media (orientation: landscape)：媒体查询只认系统给的真实视口，
+     手机一开「竖屏锁定」就永远不命中，网页也没有权限强制转屏
+     （screen.orientation.lock 只在 Android 全屏下有效，iOS 完全不支持）。
+     所以改成 class 驱动 —— 真横屏由 JS 给 body 加 .land；竖屏下点「横屏」按钮时
+     再额外给 html 加 .rot 把整个舞台旋转 90°，两路共用这一套规则，不用维护两份。 */
+  body.land.sheet-mode #keys {
+    width: calc(100% - var(--col));
+    margin-left: var(--col);
+  }
+  body.land .key { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+  body.land .key .label { margin-bottom: 8px; }
+  body.land .key .label b { font-size: 17px; }
+  body.land .key .label i { font-size: 10px; }
 
-    /* 跟弹面板：左栏居中。速度档在跟弹模式本是隐藏的（opacity:0 + 不可点），
-       所以不会和它打架，也不会挡住琴键 */
-    #follow {
-      left: 12px; top: 50%; transform: translateY(-50%);
-      width: calc(var(--col) - 24px);
-      max-height: calc(100% - 70px); overflow-y: auto;
-      padding: 13px 14px 12px; border-radius: 18px; text-align: left;
-    }
-    #follow .f-row { gap: 7px; padding: 4px 0; }
-    #follow .r-lyric { width: 6.6em; font-size: 10.5px; }
-    #follow .f-note { font-size: 15px; padding: 4px 3px 3px; }
-    #follow .f-song { font-size: 12px; letter-spacing: 2px; }
-    #follow .f-prog { font-size: 10px; }
-    #follow .f-hint { margin-top: 8px; font-size: 10px; letter-spacing: 1.5px; }
-    #follow .f-demo { margin-top: 9px; padding: 6px 16px; font-size: 11px; letter-spacing: 1.5px; }
+  /* 「氛围」跟着谱面栏走，免得浮在琴键上误触（自由弹奏时它还在右上角） */
+  body.land.sheet-mode #mood-toggle { left: auto; right: calc(100% - var(--col) + 12px); }
 
-    /* 选曲面板：横屏高度只有 390px，单列只能露 3 张卡，改两列一屏放下 5 首；
-       卡片同步压矮，否则两列省下的高度又被行高吃掉、还是会冒滚动条 */
-    #song-panel {
-      max-height: 94vh;
-      padding: 12px 14px calc(env(safe-area-inset-bottom, 12px) + 12px);
-    }
-    #song-panel .panel-head { padding: 0 4px 8px; }
-    #song-panel .panel-title { font-size: 15px; }
-    #song-panel .panel-hint { padding: 0 4px 10px; font-size: 11px; }
-    #song-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
-    .song-card { padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; }
-    .song-card .s-title { font-size: 15px; }
-    .song-card .s-preview { margin-top: 5px; }
-    .song-card .s-fall { padding: 7px 12px; }
+  /* 跟弹面板：左栏居中。速度档在跟弹模式本是隐藏的（opacity:0 + 不可点），
+     所以不会和它打架，也不会挡住琴键 */
+  body.land #follow {
+    left: 12px; top: 50%; transform: translateY(-50%);
+    width: calc(var(--col) - 24px);
+    max-height: calc(100% - 70px); overflow-y: auto;
+    padding: 13px 14px 12px; border-radius: 18px; text-align: left;
+  }
+  body.land #follow .f-row { gap: 7px; padding: 4px 0; }
+  body.land #follow .r-lyric { width: 6.6em; font-size: 10.5px; }
+  body.land #follow .f-note { font-size: 15px; padding: 4px 3px 3px; }
+  body.land #follow .f-song { font-size: 12px; letter-spacing: 2px; }
+  body.land #follow .f-prog { font-size: 10px; }
+  body.land #follow .f-hint { margin-top: 8px; font-size: 10px; letter-spacing: 1.5px; }
+  body.land #follow .f-demo { margin-top: 9px; padding: 6px 16px; font-size: 11px; letter-spacing: 1.5px; }
+
+  /* 选曲面板：横屏高度只有 390px，单列只能露 3 张卡，改两列一屏放下 5 首；
+     卡片同步压矮，否则两列省下的高度又被行高吃掉、还是会冒滚动条 */
+  body.land #song-panel {
+    max-height: 94vh;
+    padding: 12px 14px calc(env(safe-area-inset-bottom, 12px) + 12px);
+  }
+  body.land #song-panel .panel-head { padding: 0 4px 8px; }
+  body.land #song-panel .panel-title { font-size: 15px; }
+  body.land #song-panel .panel-hint { padding: 0 4px 10px; font-size: 11px; }
+  body.land #song-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  body.land .song-card { padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; }
+  body.land .song-card .s-title { font-size: 15px; }
+  body.land .song-card .s-preview { margin-top: 5px; }
+  body.land .song-card .s-fall { padding: 7px 12px; }
+
+  /* ===== 手动横屏：把舞台自己转 90°，不依赖系统转屏 =====
+     手机开着「竖屏锁定」时，系统不会转、网页也改不了（这是 OS 权限）。
+     那就自己转：body 的布局尺寸换成 100vh×100vw（正好是横屏的宽高），
+     再顺时针转 90° 贴回竖屏——于是竖着拿手机，看到的是一块横屏画布。
+     旋转后 body 会成为内部所有 position:fixed 元素的包含块，坐标自然就是横屏坐标系，
+     所以上面那一整套 .land 规则原封不动就能用，不需要第二套样式。
+     变换顺序（从右往左）：先 rotate 90° 把布局盒转到 x∈[-H,0]，再 translateX(100vw) 推回来，
+     两个角分别落在 (100vw,0) 和 (0,100vh)，正好铺满竖屏。 */
+  html.rot body {
+    position: fixed; left: 0; top: 0;
+    width: 100vh; height: 100vw;
+    transform-origin: top left;
+    transform: translateX(100vw) rotate(90deg);
   }
 </style>
 </head>
@@ -379,6 +412,7 @@
 </div>
 
 <button id="mood-toggle">氛围：空灵</button>
+<button id="rot-toggle">横屏</button>
 <button id="song-btn">弹一首</button>
 <div id="speed">
   <button data-i="0">慢</button>
@@ -603,10 +637,12 @@ function deactivateKey(key) {
 function spawnRipple(key) {
   const r = document.createElement('div');
   r.className = 'ripple';
-  const rect = key.getBoundingClientRect();
-  r.style.left = rect.width / 2 + 'px';
+  // 用 offset* 而不是 rect：手动横屏下 rect 是旋转后的包围盒，宽高会对调，
+  // 水波纹会算成一个盖住半个键的大圆
+  const rw = key.offsetWidth || 40, rh = key.offsetHeight || 200;
+  r.style.left = rw / 2 + 'px';
   r.style.bottom = '60px';
-  r.style.width = r.style.height = Math.min(rect.width, rect.height) * 0.6 + 'px';
+  r.style.width = r.style.height = Math.min(rw, rh) * 0.6 + 'px';
   key.appendChild(r);
   r.addEventListener('animationend', () => r.remove());
 }
@@ -863,19 +899,16 @@ const geom = { W: 0, H: 0, x: 0, y: 0, judgeY: 0, keyW: 0, speed: 0 };
 function resizeChart() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   // 谱面只铺在"琴键区"上：竖屏时键区就是整屏，横屏时是右侧那半边。
-  // 直接读 #keys 的真实矩形，就不用为两种朝向各写一套几何公式，
-  // 旋转屏幕时也只要重跑这个函数（resize 事件已挂在下面）。
-  const r = keysContainer.getBoundingClientRect();
-  geom.W = r.width;
-  geom.H = r.height;
-  geom.x = r.left;
-  geom.y = r.top;
-  chartEl.width = Math.round(geom.W * dpr);
-  chartEl.height = Math.round(geom.H * dpr);
-  chartEl.style.left = geom.x + 'px';
-  chartEl.style.top = geom.y + 'px';
-  chartEl.style.width = geom.W + 'px';
-  chartEl.style.height = geom.H + 'px';
+  // 用 offsetWidth/offsetHeight 而不是 getBoundingClientRect：
+  // 手动横屏时 body 被 rotate(90deg)，rect 返回的是旋转后的包围盒（宽高互换），
+  // 拿它当画布尺寸会让音符整体错位；offset* 是布局尺寸，完全不受 transform 影响。
+  // 也让 #chart 的 position 由 CSS 负责，这里只管分辨率。
+  const w = keysContainer.offsetWidth;
+  const h = keysContainer.offsetHeight;
+  geom.W = w;
+  geom.H = h;
+  chartEl.width = Math.round(w * dpr);
+  chartEl.height = Math.round(h * dpr);
   cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   geom.keyW = geom.W / PENTATONIC.length;
   // 判定线放在键标签上方：手指自然落点在这里，而不是屏幕最底下
@@ -1202,8 +1235,8 @@ function chartLoop() {
   // 分屏拖拽都会漏）。每 16 帧对一次键区真实尺寸，对不上就重算——
   // 这样无论事件来不来，音符都不会和琴键错位。
   if ((frameTick++ & 15) === 0) {
-    const r = keysContainer.getBoundingClientRect();
-    if (Math.abs(r.width - geom.W) > 1 || Math.abs(r.height - geom.H) > 1) resizeChart();
+    const rw = keysContainer.offsetWidth, rh = keysContainer.offsetHeight;
+    if (Math.abs(rw - geom.W) > 1 || Math.abs(rh - geom.H) > 1) resizeChart();
   }
   // 不用 rAF 回调自带的时间戳：它在部分环境下（headless、虚拟时间）
   // 与 performance.now() 不同源，会让音符位置整体偏移半个屏幕。
@@ -1494,6 +1527,42 @@ function scheduleChartResize(delay) {
 window.addEventListener('resize', () => scheduleChartResize(80));
 // 手机旋转：iOS 的地址栏收放会让尺寸连跳几次，给长一点的延迟再补一次
 window.addEventListener('orientationchange', () => scheduleChartResize(260));
+
+/* ===== 横屏布局开关 =====
+   真横屏（系统转过来了）和手动横屏（整屏旋转）共用 body.land 这一套规则：
+   - 真横屏 → 加 body.land
+   - 竖屏点「横屏」→ 加 body.land + html.rot（把舞台转 90°）
+   为什么不直接用 @media (orientation: landscape)：媒体查询只认系统给的真实视口，
+   手机一开「竖屏锁定」就永远不命中；而 screen.orientation.lock 只在 Android 全屏下
+   有效、iOS 完全不支持，网页根本没有强制转屏的权限。所以只能自己转。 */
+const rotBtn = document.getElementById('rot-toggle');
+const mqLand = window.matchMedia
+  ? window.matchMedia('(orientation: landscape)')
+  : { matches: false, addEventListener: null, addListener: null };
+let forceLand = false;
+
+function applyLayoutMode() {
+  const realLand = !!mqLand.matches;
+  const land = realLand || forceLand;
+  document.body.classList.toggle('land', land);
+  // 只有"竖屏 + 用户要求横屏"才需要真的旋转；系统已经是横屏时再转就转两次了
+  const root = document.documentElement;
+  if (root && root.classList) root.classList.toggle('rot', forceLand && !realLand);
+  if (rotBtn) {
+    // 系统已经横过来时这个按钮没有意义，收起来；否则按当前状态给文案
+    rotBtn.style.display = realLand ? 'none' : '';
+    rotBtn.textContent = (forceLand && !realLand) ? '竖屏' : '横屏';
+  }
+  scheduleChartResize(60);
+}
+
+if (rotBtn) rotBtn.addEventListener('click', () => {
+  forceLand = !forceLand;
+  applyLayoutMode();
+});
+if (mqLand.addEventListener) mqLand.addEventListener('change', applyLayoutMode);
+else if (mqLand.addListener) mqLand.addListener(applyLayoutMode);  // 老 Safari 只认 addListener
+applyLayoutMode();
 
 // ========== 启动入口 ==========
 function showTip() {
