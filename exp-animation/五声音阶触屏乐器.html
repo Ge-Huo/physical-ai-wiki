@@ -293,7 +293,11 @@
 
   /* ===== 跟弹模式：屏幕上方的简谱条 ===== */
   #follow {
-    position: fixed; left: 50%; top: 9%; transform: translateX(-50%);
+    /* 顶部留出右上角那排控制按钮（氛围 / 横屏 / 全屏，最下面一个底边在 131px）：
+       原来写 9%，面板矮时刚好错开，底栏加了「节拍 / 全曲示范」之后面板变高、
+       往上顶着走，进度「第 X / Y 句」正好被「全屏」压住。改成按按钮高度让位 */
+    position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 142px);
+    transform: translateX(-50%);
     z-index: 35; width: min(94vw, 480px);
     padding: 16px 18px 14px; border-radius: 22px; text-align: center;
     background: rgba(10,10,18,0.62); backdrop-filter: blur(8px);
@@ -355,13 +359,21 @@
   #follow .f-hint {
     margin-top: 10px; font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.32);
   }
-  /* 跳过/重看演示的小按钮 */
-  #follow .f-demo {
-    margin-top: 12px; padding: 7px 20px; border-radius: 16px;
-    border: 1px solid rgba(124,196,255,0.35); background: rgba(124,196,255,0.1);
-    color: #a8d8ff; font-size: 12px; letter-spacing: 2px; cursor: pointer;
+  /* 跟弹面板底部一排小按钮：节拍开关 / 全曲示范 / 再看演示。
+     三个并排而不是竖着堆——堆起来会把简谱窗挤到滚动，横屏更放不下 */
+  #follow .f-acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  #follow .f-acts button {
+    flex: 1 1 auto; padding: 7px 10px; border-radius: 14px;
+    border: 1px solid rgba(124,196,255,0.32); background: rgba(124,196,255,0.08);
+    color: #a8d8ff; font-size: 11.5px; letter-spacing: 1px; cursor: pointer;
+    white-space: nowrap;
   }
-  #follow .f-demo:active { background: rgba(124,196,255,0.22); }
+  #follow .f-acts button:active { background: rgba(124,196,255,0.22); }
+  /* 开启态（节拍开 / 示范播放中）：亮起来，一眼看出当前状态 */
+  #follow .f-acts button.on {
+    border-color: rgba(124,196,255,0.7); background: rgba(124,196,255,0.26);
+    color: #e2f2ff;
+  }
 
   /* ===== 键位发光提示（跟弹模式核心引导）=====
      下一个要弹的键直接呼吸发亮，颜色用键自己的专属色。
@@ -385,6 +397,23 @@
   @keyframes keyPulse {
     0%, 100% { opacity: 0.28; }
     50%      { opacity: 1; }
+  }
+
+  /* 节拍提示：到「该按下一音」的时刻，在目标键上打一个极短的白色小光点。
+     要和 .pulse 一眼区分开——pulse 是持续呼吸（意思是「就是这里」），
+     beat-flash 是一次性短闪（意思是「现在」）。两者叠在同一键上也不糊。 */
+  .key.beat-flash::after {
+    content: '';
+    position: absolute; left: 50%; bottom: 96px;
+    width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
+    background: #ffffff; box-shadow: 0 0 14px rgba(255,255,255,0.85);
+    pointer-events: none; animation: beatFlash 0.18s ease-out;
+  }
+  .key.beat-flash .label b { transform: scale(1.12); }
+  @keyframes beatFlash {
+    0%   { opacity: 0; transform: scale(1.6); }
+    40%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.7); }
   }
   .key.pulse .label b,
   .key.demo-hit .label b { opacity: 1; text-shadow: 0 0 18px currentColor; }
@@ -426,7 +455,8 @@
   body.land #follow .f-song { font-size: 12px; letter-spacing: 2px; }
   body.land #follow .f-prog { font-size: 10px; }
   body.land #follow .f-hint { margin-top: 8px; font-size: 10px; letter-spacing: 1.5px; }
-  body.land #follow .f-demo { margin-top: 9px; padding: 6px 16px; font-size: 11px; letter-spacing: 1.5px; }
+  body.land #follow .f-acts { margin-top: 9px; gap: 6px; }
+  body.land #follow .f-acts button { padding: 6px 8px; font-size: 10.5px; letter-spacing: 0.5px; }
 
   /* 选曲面板：横屏高度只有 390px，单列只能露 3 张卡，改两列一屏放下 5 首；
      卡片同步压矮，否则两列省下的高度又被行高吃掉、还是会冒滚动条 */
@@ -482,7 +512,11 @@
   <div class="f-head"><span class="f-song"></span><span class="f-prog"></span></div>
   <div class="f-sheet"></div>
   <div class="f-hint">照着发光的键弹 · 弹对了自动走</div>
-  <button class="f-demo">再看演示</button>
+  <div class="f-acts">
+    <button class="f-beat">节拍 · 关</button>
+    <button class="f-master">全曲示范</button>
+    <button class="f-demo">再看演示</button>
+  </div>
 </div>
 <div id="song-panel">
   <div class="panel-head">
@@ -630,8 +664,10 @@ function stopDrone() {
  * @param {'air'|'play'} mode
  *   air  —— 单击：长尾音，空间感强，适合氛围聆听
  *   play —— 滑音：短尾音 + 快起音 + 更亮的滤波起点，让一串音前后分明
+ * @param {number} vel 力度倍数（≈0.85~1.2）。示范时用它做重音与收句的强弱，
+ *                     没有力度差的一串等响音听起来就是"电子音阶"，不像演奏。
  */
-function playNote(freq, mode = 'air') {
+function playNote(freq, mode = 'air', vel = 1) {
   if (!ctx) return null;
   // 上下文被挂起时不要建节点：currentTime 不会走，这批节点会全排在 t=0，
   // 等某次恢复时在同一瞬间齐射（一串爆音），而当下依然是静音。
@@ -640,7 +676,7 @@ function playNote(freq, mode = 'air') {
   const isPlay = mode === 'play';
   const decay = isPlay ? mood.playDecay : mood.decay;
   const attack = isPlay ? 0.006 : 0.02;
-  const peak = isPlay ? 0.30 : 0.35;
+  const peak = (isPlay ? 0.30 : 0.35) * Math.max(0.2, Math.min(1.4, vel));
 
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -664,6 +700,49 @@ function playNote(freq, mode = 'air') {
   osc.stop(ctx.currentTime + decay + 0.1);
 
   return { osc, gain, filter };
+}
+
+/**
+ * 全曲示范用的低八度铺底，只在每句第一音（强拍）触发。
+ * 用 triangle 而不是 sine：手机外放推不动 130Hz 的正弦波，
+ * 有奇次谐波才听得见"下面还有个低音"，不至于糊成嗡嗡。
+ */
+function playBass(freq) {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  osc.type = 'triangle';
+  osc.frequency.value = freq / 2;
+  filter.type = 'lowpass';
+  filter.frequency.value = 420;
+  filter.Q.value = 0.7;
+  const peak = IS_TOUCH ? 0.05 : 0.10;
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(peak, t + 0.035);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+  osc.connect(filter).connect(gain).connect(masterGain);
+  osc.start(t); osc.stop(t + 1.7);
+}
+
+/**
+ * 节拍提示音：一声极短的"嗒"。
+ * 句首用更高的音（2320Hz）、句内用 1560Hz——重拍有区别，才听得出"一句又开始了"，
+ * 全都一个调的滴答很快就会变成噪音。
+ */
+function playTick(accent) {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(accent ? 2320 : 1560, t);
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(accent ? 0.07 : 0.045, t + 0.004);
+  gain.gain.exponentialRampToValueAtTime(0.0004, t + 0.09);
+  osc.connect(gain).connect(masterGain);
+  osc.start(t); osc.stop(t + 0.12);
 }
 
 // ========== UI 构建 ==========
@@ -1110,6 +1189,7 @@ function startFollow(id) {
   songState.song = song;
   songState.songId = id;
   pressed.clear();
+  stopBeat();   // 上一首可能还挂着一拍没响
   // 读谱模式：横屏时右移琴键、左栏留给谱面
   document.body.classList.add('sheet-mode');
 
@@ -1134,9 +1214,18 @@ function startFollow(id) {
 // ===== 幽灵手演示：琴键自动弹一遍 =====
 // 用 setTimeout 排时间轴（按 bpm 换算），每个音：键闪 + 出声 + 简谱条同步高亮。
 // 演示期间 followState.active = false，用户乱按不会推进进度、不会打断演示。
-const demoState = { timers: [], playing: false };
+const demoState = { timers: [], playing: false, full: false };
 const demoDone = {};   // 每首曲子只自动演示一次（本次会话内）
 const demoBtn = followEl.querySelector('.f-demo');
+const masterBtn = followEl.querySelector('.f-master');
+const beatBtn = followEl.querySelector('.f-beat');
+
+// 节拍开关的状态要放在这里：下面 demo 区块末尾会立刻调一次 syncBeatBtn()，
+// 如果 let beatOn 写在更靠后的节拍区块里，那一刻还在 TDZ，直接报错。
+const BEAT_KEY = 'wuyin.beat';
+let beatOn = false;
+try { beatOn = localStorage.getItem(BEAT_KEY) === '1'; } catch (e) {}
+const beatState = { timer: 0, flashTimer: 0, el: null };
 
 function stopDemoTimers() {
   demoState.timers.forEach(clearTimeout);
@@ -1144,15 +1233,20 @@ function stopDemoTimers() {
 }
 
 function startDemo() {
+  const song0 = SONG_MAP[followState.songId];
+  if (!song0) return;                           // 还没选曲（面板隐藏时也可能被程序点到）
+  if (demoState.full) finishMasterDemo(true);   // 全曲示范在放，先收掉
   stopDemoTimers();
+  stopBeat();
   followState.active = false;   // 演示期间判定关闭
   followState.phrase = 0;
   followState.note = 0;
   demoState.playing = true;
+  demoState.full = false;
   demoBtn.textContent = '跳过 · 我来弹';
   followEl.querySelector('.f-hint').textContent = '先看一遍：注意哪个键在亮';
 
-  const song = SONG_MAP[followState.songId];
+  const song = song0;
   const spb = 60 / song.bpm;
   // seq 第 i 个音对应第几个乐句的第几个音，演示时简谱条跟着走到那个位置
   const posMap = [];
@@ -1208,9 +1302,98 @@ function finishDemo(skipped) {
 }
 
 demoBtn.addEventListener('click', () => {
-  if (demoState.playing) finishDemo(true);   // 演示中点它 = 跳过
-  else startDemo();                          // 平时点它 = 重看
+  if (demoState.full) finishMasterDemo(true);      // 全曲示范中：先停它
+  else if (demoState.playing) finishDemo(true);    // 短演示中 = 跳过
+  else startDemo();                                // 平时点它 = 重看
 });
+
+/* ===== 全曲示范：把整首从头到尾弹一遍 =====
+   和"幽灵手"短演示的区别不只是长度，而是**演奏感**：
+   - 力度：每句第一音重（1.2）、句末收（0.9），一串等响音听着就是电子音阶
+   - 句首加低八度铺底，旋律立刻有"伴奏"，不再像是单音练习
+   - 句末自动多留 5% 时值，句与句之间有了呼吸
+   - 极小的长短起伏（±1.4%）：完全等长的音是节拍器，不是演奏
+   全曲 60~110 秒，所以按钮会变成「停止」，随时可以中断。 */
+function startMasterDemo() {
+  const song = SONG_MAP[followState.songId];
+  if (!song) return;
+  stopDemoTimers();
+  stopBeat();
+  followState.active = false;
+  followState.phrase = 0;
+  followState.note = 0;
+  demoState.playing = true;
+  demoState.full = true;
+  demoBtn.textContent = '再看演示';
+  masterBtn.textContent = '停止';
+  masterBtn.classList.add('on');
+
+  const spb = 60 / song.bpm;
+  const posMap = [];
+  song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
+
+  let t = 0;
+  song.seq.forEach(([k, beat, dur], i) => {
+    const { pi, ni } = posMap[i];
+    const isFirst = ni === 0;
+    const isLast = dur > 1;
+    const human = 1 + 0.014 * Math.sin(i * 1.7) + (isLast ? 0.05 : 0);
+    const at = 300 + t;
+    t += dur * spb * 1000 * human;
+
+    demoState.timers.push(setTimeout(() => {
+      if (!demoState.playing) return;
+      followState.phrase = pi;
+      followState.note = ni;
+      renderFollow();
+      const key = keyEls[k];
+      key.classList.add('demo-hit');
+      const freq = parseFloat(key.dataset.freq);
+      playNote(freq, 'play', isFirst ? 1.2 : isLast ? 0.9 : 1.0);
+      if (isFirst) playBass(freq);
+      spawnRipple(key);
+      demoState.timers.push(setTimeout(() => {
+        if (!demoState.playing) return;
+        key.classList.remove('demo-hit');
+      }, Math.min(dur * spb * 0.72, 0.6) * 1000));
+    }, at));
+  });
+
+  followEl.querySelector('.f-hint').textContent =
+    `全曲示范 · 约 ${Math.round(t / 1000)} 秒 · 随时可停`;
+
+  demoState.timers.push(setTimeout(() => {
+    if (demoState.playing) finishMasterDemo(false);
+  }, t + 300 + 300));
+}
+
+function finishMasterDemo(stopped) {
+  demoState.playing = false;
+  demoState.full = false;
+  stopDemoTimers();
+  keyEls.forEach(el => el.classList.remove('active', 'demo-hit'));
+  masterBtn.textContent = '全曲示范';
+  masterBtn.classList.remove('on');
+  followState.active = true;
+  followState.phrase = 0;
+  followState.note = 0;
+  renderFollow();
+  followEl.querySelector('.f-hint').textContent =
+    stopped ? '好，你来！亮哪儿按哪儿' : '听完了？轮到你了：亮哪儿按哪儿';
+}
+
+masterBtn.addEventListener('click', () => {
+  if (demoState.full) finishMasterDemo(true);
+  else startMasterDemo();
+});
+
+// 节拍开关：状态存本地，下次进来还是上次的选择
+beatBtn.addEventListener('click', () => {
+  beatOn = !beatOn;
+  try { localStorage.setItem(BEAT_KEY, beatOn ? '1' : '0'); } catch (e) {}
+  syncBeatBtn();
+});
+syncBeatBtn();
 
 function renderFollow() {
   const song = SONG_MAP[followState.songId];
@@ -1308,12 +1491,69 @@ function renderFollow() {
   }
 }
 
+// ===== 跟弹节拍提示 =====
+// 设计成"跟着你走"的节拍器，而不是一个自顾自走的时钟：
+// 你每弹对一个音，它按这个音的时值延后一拍响一声；你要是卡住不再弹，
+// 它响完这一声就停，不会一直滴答催你（跟弹本来就没有时间压力）。
+// 好处是它教的正是"间隔"——提示的是"下一个音该在多久之后"，
+// 而不是"你落后了几拍"。后者只会让新手越急越乱。
+// （状态声明在上面的 demo 区块里，那里要提前用）
+
+/** 取消待响的那一拍，并清掉键上的短闪 */
+function stopBeat() {
+  clearTimeout(beatState.timer);
+  clearTimeout(beatState.flashTimer);
+  beatState.timer = 0;
+  if (beatState.el) { beatState.el.classList.remove('beat-flash'); beatState.el = null; }
+}
+
+/**
+ * 刚弹完一个音，排下一拍的提示。
+ * @param {number} durBeats 刚弹完这个音的时值（拍）。句末是 2 拍，
+ *                          所以句间的提示天然会隔两拍——分句的呼吸被听见了。
+ */
+function scheduleBeat(durBeats) {
+  stopBeat();
+  if (!beatOn || !followState.active) return;
+  const song = SONG_MAP[followState.songId];
+  if (!song) return;
+  const delay = durBeats * (60 / song.bpm) * 1000;
+  beatState.timer = setTimeout(() => {
+    beatState.timer = 0;
+    if (!beatOn || !followState.active) return;
+    const p = song.phrases[followState.phrase];
+    if (!p) return;
+    const accent = followState.note === 0;
+    playTick(accent);
+    const el = keyEls[p.notes[followState.note]];
+    if (!el) return;
+    el.classList.remove('beat-flash');
+    // 强制重排一次动画：连续两拍落在同一个键上（同一音重复）时要能重新闪
+    void el.offsetWidth;
+    el.classList.add('beat-flash');
+    beatState.el = el;
+    beatState.flashTimer = setTimeout(() => {
+      el.classList.remove('beat-flash');
+      if (beatState.el === el) beatState.el = null;
+    }, 200);
+  }, delay);
+}
+
+function syncBeatBtn() {
+  beatBtn.textContent = beatOn ? '节拍 · 开' : '节拍 · 关';
+  beatBtn.classList.toggle('on', beatOn);
+  if (!beatOn) stopBeat();
+}
+
 function followJudge(idx) {
   if (!followState.active) return;
   const song = SONG_MAP[followState.songId];
   const p = song.phrases[followState.phrase];
   // 弹错键：不出声地等（那个键还是会发它自己的音），不前进、不提示
   if (idx !== p.notes[followState.note]) return;
+
+  // 记下刚弹完这个音的时值：句末是 2 拍，节拍提示据此把句间的"呼吸"留出来
+  const durBeats = followState.note === p.notes.length - 1 ? 2 : 1;
 
   followState.note++;
   if (followState.note >= p.notes.length) {
@@ -1330,6 +1570,7 @@ function followJudge(idx) {
       return;
     }
   }
+  scheduleBeat(durBeats);
   renderFollow();
 }
 
@@ -1337,7 +1578,13 @@ function endSong() {
   songState.active = false;
   followState.active = false;
   demoState.playing = false;
+  demoState.full = false;
   stopDemoTimers();
+  stopBeat();
+  // 退出后这些按钮回到初始文案，否则下次进来会停在「停止」
+  masterBtn.textContent = '全曲示范';
+  masterBtn.classList.remove('on');
+  demoBtn.textContent = '再看演示';
   cancelAnimationFrame(songState.raf);
   chartEl.classList.remove('show');
   speedEl.classList.remove('show');
