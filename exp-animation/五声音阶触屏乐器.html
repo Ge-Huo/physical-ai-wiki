@@ -787,7 +787,11 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
   const filter = ctx.createBiquadFilter();
 
   osc.type = 'triangle';
-  osc.frequency.value = freq;
+  // 上滑起音：民族乐器几乎每一个音都是"滑进去"的——笛子的气冲、古筝的按音、
+  // 二胡的换把，起音瞬间音高略低再落准。纯平的音头是"电子琴"最容易露馅的地方，
+  // 40ms 内从低 3.5% 滑到准音，听感立刻从"按了个键"变成"有人吹出来了"。
+  osc.frequency.setValueAtTime(freq * 0.965, now);
+  osc.frequency.exponentialRampToValueAtTime(freq, now + 0.042);
 
   filter.type = 'lowpass';
   filter.Q.value = 1.6;
@@ -854,11 +858,13 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
  * 为什么用八度而不是三度、五度：五声音阶里任何音叠八度永远协和，
  * 换句子换根音也不会撞音——这是最不容易出错的伴奏写法。
  */
-function playPad(freq, ms) {
+function playPad(freq, ms, vol) {
   if (!ctx || ctx.state !== 'running') return;
   const t = ctx.currentTime;
   const dur = Math.max(0.7, Math.min(4.5, ms / 1000));
-  const peak = IS_TOUCH ? 0.05 : 0.085;
+  // vol：段落编曲用的整体音量（0.6 = 轻，1.1 = 厚）。同一段旋律弹 5 遍，
+  // 全靠这一层和鼓的进出区分"这是第几段"，否则 20 句听起来是同一句重复 20 次。
+  const peak = (IS_TOUCH ? 0.05 : 0.085) * Math.max(0.2, Math.min(1.4, vol || 1));
   const filt = ctx.createBiquadFilter();
   filt.type = 'lowpass';
   filt.frequency.value = 460;
@@ -879,6 +885,80 @@ function playPad(freq, ms) {
     o.connect(og).connect(filt);
     o.start(t); o.stop(t + dur + 0.5);
   });
+}
+
+/* ===== 鼓：让"每小节四拍"听得见 =====
+   谱里第 4 拍常常没有音（一句是"半 半 一 半 一拍半"，正好空掉第 4 拍），
+   光靠旋律根本数不出拍子，所以听感是"一串音"而不是"一首歌"。
+   鼓走自己的网格，是骨架，不是旋律的影子。 */
+
+// 噪声缓冲只建一次：鼓点一秒好几下，每次 new Buffer 会反复分配内存
+let noiseBuf = null;
+function noiseBurst(sec, amp, freq, type) {
+  if (!ctx || ctx.state !== 'running') return null;
+  if (!noiseBuf) {
+    const len = Math.floor(ctx.sampleRate * 0.25);
+    noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  const f = ctx.createBiquadFilter();
+  f.type = type || 'highpass';
+  f.frequency.value = freq || 1200;
+  f.Q.value = 0.8;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(amp, t);
+  g.gain.exponentialRampToValueAtTime(0.0004, t + sec);
+  src.connect(f).connect(g);
+  src.start(t); src.stop(t + sec + 0.02);
+  return g;
+}
+
+/**
+ * 大鼓：一声「咚」。64Hz 在 90ms 内滑到 42Hz（鼓皮张力松下去），
+ * 再叠一小段高通噪声当「皮」的质感。音量压得很低——鼓是骨架，不是主角。
+ */
+function playKick(vel) {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const v = Math.max(0.1, Math.min(1.3, vel || 1));
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(64, t);
+  osc.frequency.exponentialRampToValueAtTime(42, t + 0.09);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.17 * v, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0006, t + 0.26);
+  osc.connect(g).connect(masterGain);
+  osc.start(t); osc.stop(t + 0.28);
+  const n = noiseBurst(0.03, 0.045 * v, 1600, 'highpass');
+  if (n) n.connect(masterGain);
+}
+
+/**
+ * 梆子 / 木鱼：短促的高频点击，占第 2、4 拍。方波给硬边，带通滤掉低频，
+ * 70ms 收干净。它和鼓一起把「每小节四拍」钉住。
+ */
+function playRim(vel) {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const v = Math.max(0.1, Math.min(1.3, vel || 1));
+  const osc = ctx.createOscillator();
+  const f = ctx.createBiquadFilter();
+  const g = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(1180, t);
+  osc.frequency.exponentialRampToValueAtTime(900, t + 0.03);
+  f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 3.5;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.055 * v, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0004, t + 0.07);
+  osc.connect(f).connect(g).connect(masterGain);
+  osc.start(t); osc.stop(t + 0.09);
 }
 
 /**
@@ -1589,23 +1669,49 @@ function startMasterDemo() {
   const phraseMs = song.phrases.map(p =>
     (p.rhythm || rhythmOf(p.notes.length)).reduce((a, b) => a + b, 0) * noteMs);
 
+  // ===== 段落编曲：这段旋律要弹 5 遍，全靠"织体"分层才不会死板 =====
+  // 段1 只给旋律 + 薄和声垫（把主题说清楚）→ 段2 进鼓 → 段3 全力高潮
+  // → 段4 撤鼓、只留旋律（对比）→ 段5 最轻收尾。
+  // 这是编曲里最老的套路，也是"像一首歌"最有效的一招：
+  // **旋律一个字没改，只要伴奏在推进，听感就不会觉得在重复**。
+  const verseOf = [];
+  if (song.groups) {
+    let acc = 0;
+    song.groups.forEach((g, vi) => { for (let k = 0; k < g; k++) verseOf[acc + k] = vi; acc += g; });
+  } else song.phrases.forEach((_, i) => { verseOf[i] = 0; });
+  const LAYERS = [
+    { pad: 0.70, drum: 0.00, vel: 0.93 },   // 段1：只有旋律，把主题说清楚
+    { pad: 0.92, drum: 0.62, vel: 1.00 },   // 段2：进鼓
+    { pad: 1.15, drum: 1.00, vel: 1.07 },   // 段3：全力
+    { pad: 0.88, drum: 0.00, vel: 0.96 },   // 段4：撤鼓，只剩旋律（对比）
+    { pad: 0.58, drum: 0.50, vel: 0.87 },   // 段5：最轻，收
+  ];
+  const layerOf = pi => LAYERS[Math.min(LAYERS.length - 1, verseOf[pi] || 0)];
+
+  // 确定性伪随机：不用 Math.random，测试才能复现
+  const rnd = n => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
+
   let t = 0;
   song.seq.forEach(([k, beat, dur], i) => {
     const { pi, ni } = posMap[i];
     const p = song.phrases[pi];
+    const lay = layerOf(pi);
     const isFirst = ni === 0;
     const isLast = ni === p.notes.length - 1;
-    // ±1.4% 的长短起伏：完全等长的是节拍器，不是演奏
-    const human = 1 + 0.014 * Math.sin(i * 1.7);
-    // 时值直接来自 rhythmOf：半拍 / 一拍 / 一拍半，这才是旋律不是音阶
-    const ms = dur * noteMs * human;
-    const at = 300 + t;
+    // 时值用理论值累加，**不乘 humanize**：一旦乘上去，100 个音的误差会累积，
+    // 后半段就和鼓点错开半拍以上。人演奏不会改总时长，只会每个音早晚一点点，
+    // 所以微起伏加到"起音时刻"上（±10ms），不进累加。
+    const ms = dur * noteMs;
+    const at = 300 + t + (rnd(i) - 0.5) * 20;   // ±10ms 的起音手感
     t += ms;
 
-    // 力度弧线：句腰最响、两头收。原来的固定三档（重 / 中 / 轻）听感还是
-    // "逐个音开关音量"，一条连续起伏才像"一口气唱完一句"。
+    // 力度弧线：峰值位置每句游移。20 句都用"句腰最响"，
+    // 就成了 20 次一模一样的呼吸——这是"死板"的另一半来源。
+    // wob 让峰值在 0.38~0.60 之间摆，同一句旋律每次唱都不一样。
+    const wob = 0.38 + 0.22 * (0.5 + 0.5 * Math.sin(pi * 2.1));
     const prog = ni / Math.max(1, p.notes.length - 1);
-    const vel = (0.94 + 0.20 * Math.sin(Math.PI * prog)) * (isLast ? 0.96 : 1);
+    const arc = Math.sin(Math.PI * Math.pow(prog, Math.log(0.5) / Math.log(wob)));
+    const vel = (0.93 + 0.21 * arc) * lay.vel * (isLast ? 0.96 : 1);
 
     demoState.timers.push(setTimeout(() => {
       if (!demoState.playing) return;
@@ -1619,8 +1725,8 @@ function startMasterDemo() {
       // 句末长音给足余韵。音有长短这件事，一半靠时值、一半靠余音，
       // 两者同时对，耳朵才认得出"这是一句歌"。
       playNote(freq, 'play', vel, Math.max(0.5, Math.min(2.2, ms / 420)));
-      // 和声垫：每句首音起一条长音托住整句，旋律下面终于有"第二声部"
-      if (isFirst) playPad(freq, phraseMs[pi]);
+      // 和声垫：每句首音起一条长音托住整句，音量随段落实时加厚 / 减薄
+      if (isFirst) playPad(freq, phraseMs[pi], lay.pad);
       spawnRipple(key);
       demoState.timers.push(setTimeout(() => {
         if (!demoState.playing) return;
@@ -1628,6 +1734,29 @@ function startMasterDemo() {
       }, Math.min(ms * 0.72, 600)));
     }, at));
   });
+
+  // ===== 鼓：走自己的网格，每拍一个，不挂在音符上 =====
+  // 谱里第 4 拍常常没有音（一句是"半 半 一 半 一拍半"，正好空掉第 4 拍），
+  // 只靠旋律根本数不出拍子。鼓负责钉住"每小节四拍"，段落进出负责"这是第几段"。
+  const phraseAtBeat = b => {
+    let lo = 0;
+    for (let i = 0; i < song.lyrics.length; i++) if (song.lyrics[i].beat <= b) lo = i;
+    return lo;
+  };
+  const totalBeats = Math.round(t / noteMs);
+  for (let b = 0; b < totalBeats; b++) {
+    const dv = layerOf(phraseAtBeat(b)).drum;
+    if (dv <= 0) continue;                    // 这一段不要鼓（段1 / 段4 的留白）
+    const at = 300 + b * noteMs;
+    const inBar = b % 4;
+    const strong = inBar === 0;
+    const off = inBar === 1 || inBar === 3;
+    demoState.timers.push(setTimeout(() => {
+      if (!demoState.playing) return;
+      if (off) playRim(dv * 0.62);
+      else playKick(strong ? dv : dv * 0.55);
+    }, at));
+  }
 
   followEl.querySelector('.f-hint').textContent =
     `全曲示范 · ${demoBpm} 拍/分 · 每拍 ${(noteMs / 1000).toFixed(2)} 秒 · 约 ${Math.round(t / 1000)} 秒`;
@@ -1792,7 +1921,9 @@ function scheduleBeat(durBeats) {
   if (!beatOn || !followState.active) return;
   const song = SONG_MAP[followState.songId];
   if (!song) return;
-  const delay = durBeats * (60 / song.bpm) * 1000;
+  // 间隔用**滑块上的拍速**，不是曲库 bpm：用户刚听完示范，脑子里是那个速度。
+  // 示范 107 拍/分、节拍提示却按曲库 66 走，等于两个速度在打架。
+  const delay = durBeats * demoNoteMs();
   beatState.timer = setTimeout(() => {
     beatState.timer = 0;
     if (!beatOn || !followState.active) return;
