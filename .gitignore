@@ -1,0 +1,11 @@
+# Office 打开文档时生成的临时所有者锁文件（~$ 前缀），不是文档正文
+~$*
+
+# Office 临时文件
+*.tmp
+.~lock.*
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
