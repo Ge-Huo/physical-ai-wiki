@@ -136,6 +136,22 @@
   }
   #fs-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* 音频被浏览器挂起时的提示条（桌面端常见：策略拦截、标签页被静音）。
+     和全屏提示不同，这条可以点——点一下就 resume，不是干看着。 */
+  #audio-hint {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 146px);
+    transform: translateX(-50%) translateY(8px); z-index: 92;
+    width: 82vw; max-width: 340px;
+    padding: 10px 16px; border-radius: 14px;
+    background: rgba(214,158,46,0.15); border: 1px solid rgba(214,158,46,0.45);
+    backdrop-filter: blur(12px);
+    color: #f0d9a8; font-size: 12px; line-height: 1.7; letter-spacing: 0.3px;
+    text-align: center; pointer-events: auto; cursor: pointer;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
+  }
+  #audio-hint.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
   /* 首次进入的操作提示，5 秒后自动隐去 */
   #tip {
     position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
@@ -500,20 +516,83 @@ const MOODS = {
   ethereal: { label: '空灵', droneFreqs: [130.81, 196.00], filterFreq: 800,  decay: 2.5, playDecay: 0.42 },
   warm:     { label: '温暖', droneFreqs: [130.81, 164.81], filterFreq: 1200, decay: 1.8, playDecay: 0.42 },
   dark:     { label: '幽深', droneFreqs: [110.00, 164.81], filterFreq: 500,  decay: 3.0, playDecay: 0.46 },
+  // 底噪是持续音，手机外放小喇叭放不好 110~130Hz（低频被切掉、只剩失真谐波），
+  // 听感就是一直嗡嗡。给它一个能关掉的档，也让"只想弹琴"的人安静。
+  off:      { label: '关',   droneFreqs: [],                    filterFreq: 800,  decay: 2.5, playDecay: 0.42 },
 };
 const MOOD_KEYS = Object.keys(MOODS);
 
-let ctx, masterGain, droneOscs = [], currentMoodIdx = 0;
+// 手机外放对 100~200Hz 的还原极差：正弦波被扬声器非线性削顶，谐波变成"嗡嗡"的
+// 嗡嗡声反而比电脑上更响。所以移动端把底噪压到三分之一，且**默认关闭**——
+// 想听氛围点一下氛围按钮即可，不想听就一直清清爽爽。
+const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+                 ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+const DRONE_LEVEL = IS_TOUCH ? 0.026 : 0.05;
+
+let ctx, masterGain, droneOscs = [];
+// 手机默认「关」：外放听不出氛围、只剩嗡嗡；电脑默认「空灵」
+let currentMoodIdx = IS_TOUCH ? MOOD_KEYS.indexOf('off') : 0;
 let isAudioStarted = false;
 
 function initAudio() {
   if (isAudioStarted) return;
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { showAudioHint('这个浏览器不支持网页音频，换 Chrome 或 Safari 试试'); return; }
+  ctx = new AC();
   masterGain = ctx.createGain();
   masterGain.gain.value = 0.6;
   masterGain.connect(ctx.destination);
   startDrone();
   isAudioStarted = true;
+  // 浏览器（尤其桌面 Chrome/Edge、以及开了"阻止自动播放"的情况）经常把新建的
+  // AudioContext 直接置为 suspended：此时 currentTime 停在 0，所有节点都排上队
+  // 却永不发声 —— 表现就是"整页一点声音都没有"。必须显式 resume。
+  unlockAudio();
+  // 状态变化（被系统挂起/恢复）也要反映到提示条上
+  ctx.onstatechange = updateAudioHint;
+  updateAudioHint();
+}
+
+/**
+ * 恢复被浏览器挂起的音频上下文。
+ * 只在用户手势里调用才有效，所以琴键、按钮、页面回前台都挂一份。
+ */
+function unlockAudio() {
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    const p = ctx.resume();
+    if (p && p.catch) p.catch(() => {});
+  }
+}
+
+// 声音没起来时给一条可点的提示，而不是让用户对着静音页面猜原因
+function audioHintEl() {
+  let el = document.getElementById('audio-hint');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'audio-hint';
+    el.addEventListener('click', () => {
+      unlockAudio();
+      // resume 是异步的，给它一拍再判状态
+      setTimeout(updateAudioHint, 260);
+    });
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function updateAudioHint() {
+  if (!isAudioStarted) return;
+  const el = audioHintEl();
+  const paused = !!ctx && ctx.state !== 'running';
+  el.classList.toggle('show', paused);
+  if (paused) el.textContent = '浏览器把声音暂停了 · 点这里恢复';
+}
+
+function showAudioHint(text) {
+  const el = audioHintEl();
+  el.textContent = text;
+  el.classList.add('show');
 }
 
 function startDrone() {
@@ -529,8 +608,8 @@ function startDrone() {
     filter.frequency.value = mood.filterFreq;
     filter.Q.value = 1;
     gain.gain.value = 0;
-    // 淡入
-    gain.gain.setTargetAtTime(0.08, ctx.currentTime, 1.5);
+    // 淡入（移动端音量另有折扣，见 DRONE_LEVEL）
+    gain.gain.setTargetAtTime(DRONE_LEVEL, ctx.currentTime, 1.5);
     osc.connect(filter).connect(gain).connect(masterGain);
     osc.start();
     droneOscs.push({ osc, gain, filter });
@@ -554,6 +633,9 @@ function stopDrone() {
  */
 function playNote(freq, mode = 'air') {
   if (!ctx) return null;
+  // 上下文被挂起时不要建节点：currentTime 不会走，这批节点会全排在 t=0，
+  // 等某次恢复时在同一瞬间齐射（一串爆音），而当下依然是静音。
+  if (ctx.state !== 'running') { unlockAudio(); return null; }
   const mood = MOODS[MOOD_KEYS[currentMoodIdx]];
   const isPlay = mode === 'play';
   const decay = isPlay ? mood.playDecay : mood.decay;
@@ -723,6 +805,8 @@ window.addEventListener('mouseup', () => {
 
 // ========== 氛围切换 ==========
 const moodBtn = document.getElementById('mood-toggle');
+// 按钮文案按实际初始档位写一遍：手机默认「关」，不能还挂着 HTML 里的「空灵」
+moodBtn.textContent = `氛围：${MOODS[MOOD_KEYS[currentMoodIdx]].label}`;
 moodBtn.addEventListener('click', () => {
   if (!isAudioStarted) return;
   currentMoodIdx = (currentMoodIdx + 1) % MOOD_KEYS.length;
@@ -1567,6 +1651,21 @@ function scheduleChartResize(delay) {
 window.addEventListener('resize', () => scheduleChartResize(80));
 // 手机旋转：iOS 的地址栏收放会让尺寸连跳几次，给长一点的延迟再补一次
 window.addEventListener('orientationchange', () => scheduleChartResize(260));
+
+/* ===== 音频自愈 =====
+   浏览器的自动播放策略会随时把 AudioContext 挂成 suspended（页面切后台再回来、
+   系统来电、省电模式、桌面端"阻止自动播放"开关）。它一旦挂着，currentTime 就冻在
+   原地，页面彻底静音 —— 而且不会有任何报错。这里在每一次用户手势里顺手恢复：
+   用户点任何地方，下一声响就该回来。 */
+['pointerdown', 'touchstart', 'mousedown', 'keydown'].forEach(type => {
+  window.addEventListener(type, () => {
+    if (ctx && ctx.state === 'suspended') unlockAudio();
+  }, { passive: true, capture: true });
+});
+// 切回前台也恢复一次（手机锁屏、切微信再回来最常见的静音原因）
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) unlockAudio();
+});
 
 /* ===== 横屏布局开关 =====
    真横屏（系统转过来了）和手动横屏（整屏旋转）共用 body.land 这一套规则：
