@@ -374,24 +374,42 @@
     border-color: rgba(124,196,255,0.7); background: rgba(124,196,255,0.26);
     color: #e2f2ff;
   }
-  /* 示范速度：慢 / 标准 / 快。单独一行小药丸，不跟上面三个功能键混排——
-     混排后一行放四个，11px 字号在 320px 宽的手机上会挤成两行反而更占地方。 */
-  #follow .f-speeds {
-    display: flex; align-items: center; justify-content: center;
-    gap: 6px; margin-top: 8px;
+  /* 示范速度：一根滑块，左慢右快。
+     用滑块而不是几档按钮：三档永远覆盖不到"我就是要更快"，而快慢本来就是连续的。
+     右端读数报"拍/分"——这是音乐里描述速度的通用单位，也方便对照唱片。 */
+  #follow .f-speed {
+    display: flex; align-items: center; gap: 8px; margin-top: 9px;
+    padding: 0 2px;
   }
-  #follow .f-speeds .lbl {
-    font-size: 9.5px; letter-spacing: 1px; color: rgba(255,255,255,0.3);
-    margin-right: 2px;
+  #follow .f-speed .lbl {
+    flex-shrink: 0; font-size: 9.5px; letter-spacing: 1px; color: rgba(255,255,255,0.3);
   }
-  #follow .f-speeds button {
-    padding: 4px 11px; border-radius: 11px;
-    border: 1px solid rgba(255,255,255,0.14); background: transparent;
-    color: rgba(255,255,255,0.45); font-size: 10.5px; letter-spacing: 1px; cursor: pointer;
+  #follow .f-speed .val {
+    flex-shrink: 0; min-width: 4.6em; text-align: right;
+    font-size: 9.5px; letter-spacing: 0.5px; color: rgba(124,196,255,0.8);
+    font-variant-numeric: tabular-nums;
   }
-  #follow .f-speeds button.on {
-    border-color: rgba(124,196,255,0.62); background: rgba(124,196,255,0.2);
-    color: #dcefff;
+  /* 轨道填充用 --p（JS 按当前位置写百分比）：不填充的深色轨道在深色面板上
+     几乎看不见端点，看不出"还能往右拉多少" */
+  #follow .f-range {
+    flex: 1; min-width: 0; height: 16px; margin: 0; padding: 0;
+    background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer;
+  }
+  #follow .f-range::-webkit-slider-runnable-track {
+    height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg,
+      rgba(124,196,255,0.8) 0, rgba(124,196,255,0.8) var(--p, 40%),
+      rgba(255,255,255,0.14) var(--p, 40%), rgba(255,255,255,0.14) 100%);
+  }
+  #follow .f-range::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; margin-top: -5px; border: 0; border-radius: 50%;
+    background: #bfe2ff; box-shadow: 0 0 9px rgba(124,196,255,0.85);
+  }
+  #follow .f-range::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,0.14); }
+  #follow .f-range::-moz-range-progress { height: 3px; border-radius: 2px; background: rgba(124,196,255,0.8); }
+  #follow .f-range::-moz-range-thumb {
+    width: 13px; height: 13px; border: 0; border-radius: 50%; background: #bfe2ff;
   }
 
   /* ===== 键位发光提示（跟弹模式核心引导）=====
@@ -476,10 +494,11 @@
   body.land #follow .f-hint { margin-top: 8px; font-size: 10px; letter-spacing: 1.5px; }
   body.land #follow .f-acts { margin-top: 9px; gap: 6px; }
   body.land #follow .f-acts button { padding: 6px 8px; font-size: 10.5px; letter-spacing: 0.5px; }
-  /* 横屏高度只有 390px，速度药丸再矮一档，别把面板顶出滚动条 */
-  body.land #follow .f-speeds { margin-top: 6px; gap: 5px; }
-  body.land #follow .f-speeds button { padding: 3px 9px; font-size: 9.5px; }
-  body.land #follow .f-speeds .lbl { font-size: 9px; letter-spacing: 0.5px; }
+  /* 横屏高度只有 390px：滑块行再压一档，别把面板顶出滚动条 */
+  body.land #follow .f-speed { margin-top: 7px; gap: 6px; }
+  body.land #follow .f-speed .lbl,
+  body.land #follow .f-speed .val { font-size: 9px; }
+  body.land #follow .f-speed .val { min-width: 4.2em; }
 
   /* 选曲面板：横屏高度只有 390px，单列只能露 3 张卡，改两列一屏放下 5 首；
      卡片同步压矮，否则两列省下的高度又被行高吃掉、还是会冒滚动条 */
@@ -540,11 +559,11 @@
     <button class="f-master">全曲示范</button>
     <button class="f-demo">再看演示</button>
   </div>
-  <div class="f-speeds">
-    <span class="lbl">示范速度</span>
-    <button>慢</button>
-    <button>标准</button>
-    <button>快</button>
+  <div class="f-speed">
+    <span class="lbl">速度</span>
+    <input type="range" class="f-range" min="66" max="176" step="1" value="107"
+           aria-label="示范速度（拍/分）">
+    <span class="val">107 拍/分</span>
   </div>
 </div>
 <div id="song-panel">
@@ -1256,50 +1275,64 @@ let beatOn = false;
 try { beatOn = localStorage.getItem(BEAT_KEY) === '1'; } catch (e) {}
 const beatState = { timer: 0, flashTimer: 0, el: null };
 
-/* ===== 示范速度：慢 / 标准 / 快 =====
-   原来示范直接拿曲子的 bpm 当"每音一拍"，听着明显比唱片慢一大截：
-   五线/简谱上这些旋律音多是八分音符的流动感，谱子当年按"每音一拍 + 句末两拍"简化了，
-   于是把音距拉长了一倍。这里按曲速等比放大（保住每首歌自己的性子：沧海慢、兔子快），
-   三档分别对应「跟练 / 唱片里听到的 / 炫技」。 */
-const DEMO_SPEEDS = [
-  { id: 'slow', label: '慢',   boost: 1.00 },
-  { id: 'std',  label: '标准', boost: 1.30 },
-  { id: 'fast', label: '快',   boost: 1.62 },
-];
-const DEMO_SPEED_KEY = 'wuyin.demoSp';
-let demoSpIdx = 1;   // 默认「标准」：第一次听就该是熟悉的那个速度
+/* ===== 示范速度：一根滑块 =====
+   为什么不再用「慢 / 标准 / 快」三档：三档是我替大家猜的三个值，猜中才怪——
+   要听"电视里那种速度"的人嫌最快那档还不够快，就没地方可去了。快慢本来是连续的，
+   交给滑块，右端一直放到 176 拍/分（每音 340ms），够快也够猛。
+
+   默认 107 拍/分（每音 0.56 秒）：按唱片里《沧海一声笑》的实际唱速标的——
+   一句五个字约 3 秒，和电视里听到的一致；原来照曲库 bpm 弹是 66 拍/分（每音 0.91 秒），
+   明显拖，这就是"听着比唱片慢"的主因。
+
+   另外两处"显得慢"的来源，这次一起改掉了：
+   ① 简谱把句末记成 2 拍（半音符），示范照搬，每 5 个字就要空出 1 秒多，
+      整首是一顿一顿地拖；真人唱到句末只是稍微拖一点 → 改成 1.4 倍。
+   ② 短演示（幽灵手）用的是"累计拍数 × 每拍"，句末 2 拍同样照搬，问题一样。 */
+const DEMO_BPM = { min: 66, max: 176, def: 107 };
+const DEMO_BPM_KEY = 'wuyin.demoBpm';
+let demoBpm = DEMO_BPM.def;
 try {
-  const i = DEMO_SPEEDS.findIndex(s => s.id === localStorage.getItem(DEMO_SPEED_KEY));
-  if (i >= 0) demoSpIdx = i;
+  const v = Number(localStorage.getItem(DEMO_BPM_KEY));
+  if (v >= DEMO_BPM.min && v <= DEMO_BPM.max) demoBpm = v;
 } catch (e) {}
 
-// 每音时长（ms）。夹在 380~950：低于 380 听着像打字机，高于 950 就散成一个个孤点，
-// 两种都失去"一句旋律"的连贯感（这也是「多少拍速才有音乐感」那组数的边界）。
-function demoNoteMs(song) {
-  const ms = 60000 / song.bpm / DEMO_SPEEDS[demoSpIdx].boost;
-  return Math.max(380, Math.min(950, ms));
-}
+// 句末长音相对普通音的倍数。2 拍是简谱写法、不是唱法：按 2 倍弹，
+// 每个乐句末尾都要空出整整一个音的时间，20 句积起来就是二十几秒的死气。
+const PHRASE_TAIL = 1.4;
 
-// 注意变量名带 demo 前缀：下面瀑布流速度档也叫 speedBtns（那三个是「下落速度」），
-// 两个都用 const 声明，重名会直接 SyntaxError 把整页脚本干掉。
-const demoSpeedBtns = Array.from(followEl.querySelectorAll('.f-speeds button'));
-function syncDemoSpeedBtns() {
-  demoSpeedBtns.forEach((b, i) => b.classList.toggle('on', i === demoSpIdx));
+// 每音时长（ms）。demoBpm = 每分钟多少个音，直接取倒数
+function demoNoteMs() { return 60000 / demoBpm; }
+
+const rangeEl = followEl.querySelector('.f-range');
+const rangeVal = followEl.querySelector('.f-speed .val');
+function syncSpeedUI() {
+  if (!rangeEl) return;
+  rangeEl.value = demoBpm;
+  // 轨道已走过的部分：深色面板上不填充，就看不出滑块还能往右拉多少
+  const pct = (demoBpm - DEMO_BPM.min) / (DEMO_BPM.max - DEMO_BPM.min) * 100;
+  if (rangeEl.style && rangeEl.style.setProperty) {
+    rangeEl.style.setProperty('--p', pct.toFixed(1) + '%');
+  }
+  if (rangeVal) rangeVal.textContent = demoBpm + ' 拍/分';
 }
-demoSpeedBtns.forEach((b, i) => {
-  b.addEventListener('click', () => {
-    if (i === demoSpIdx) return;
-    demoSpIdx = i;
-    try { localStorage.setItem(DEMO_SPEED_KEY, DEMO_SPEEDS[i].id); } catch (e) {}
-    syncDemoSpeedBtns();
-    // 正在放示范就换速重来：比"下次生效"更符合直觉，也免得点了像没反应
+if (rangeEl) {
+  // input 只更新读数（拖动时连续触发）；change（松手）才落盘 + 重排。
+  // 边拖边重排等于每一帧都从头放一遍，听起来是一团乱响。
+  rangeEl.addEventListener('input', () => {
+    const v = Number(rangeEl.value);
+    demoBpm = Math.max(DEMO_BPM.min, Math.min(DEMO_BPM.max, v || DEMO_BPM.def));
+    syncSpeedUI();
+  });
+  rangeEl.addEventListener('change', () => {
+    try { localStorage.setItem(DEMO_BPM_KEY, String(demoBpm)); } catch (e) {}
+    // 正在放示范就按新速度重来：比"下次生效"更符合直觉，也免得拉完没反应
     if (demoState.playing) {
       if (demoState.full) { finishMasterDemo(true); startMasterDemo(); }
       else { finishDemo(true); startDemo(); }
     }
   });
-});
-syncDemoSpeedBtns();
+}
+syncSpeedUI();
 
 function stopDemoTimers() {
   demoState.timers.forEach(clearTimeout);
@@ -1321,19 +1354,25 @@ function startDemo() {
   followEl.querySelector('.f-hint').textContent = '先看一遍：注意哪个键在亮';
 
   const song = song0;
-  // 每音时长由「示范速度」决定，不再直接用 bpm（见 DEMO_SPEEDS 处的说明）
-  const noteMs = demoNoteMs(song);
+  // 每音时长由「示范速度」滑块决定，不再直接用曲库 bpm（见 DEMO_BPM 处的说明）
+  const noteMs = demoNoteMs();
   // seq 第 i 个音对应第几个乐句的第几个音，演示时简谱条跟着走到那个位置
   const posMap = [];
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
 
   // 全曲化之后整首演示太长（沧海五段要一分多钟），演示只放第一段：
-  // 第一段听懂旋律、看懂玩法就够了。beat 取自 seq，截取前缀节拍依然正确。
+  // 第一段听懂旋律、看懂玩法就够了。
   const firstVerse = song.groups ? song.groups[0] : song.phrases.length;
   const demoSeq = song.seq.filter((_, i) => posMap[i].pi < firstVerse);
   const demoPos = posMap.filter(p => p.pi < firstVerse);
 
-  demoSeq.forEach(([k, beat, dur], i) => {
+  // 时间轴自己累加，不再用 seq 里的累计拍数：句末长音已改成 PHRASE_TAIL 倍，
+  // 累计拍数（句末算 2 拍）和真实时长对不上了，继续拿它换算会让画面早于声音。
+  let t = 0;
+  demoSeq.forEach(([k, , dur], i) => {
+    const ms = (dur > 1 ? PHRASE_TAIL : 1) * noteMs;
+    const at = 300 + t;   // 300ms 起始缓冲，让界面先落定
+    t += ms;
     demoState.timers.push(setTimeout(() => {
       if (!demoState.playing) return;
       followState.phrase = posMap[i].pi;
@@ -1349,12 +1388,11 @@ function startDemo() {
       demoState.timers.push(setTimeout(() => {
         if (!demoState.playing) return;
         key.classList.remove('demo-hit');
-      }, Math.min(dur * noteMs * 0.72, 550)));
-    }, beat * noteMs + 300));   // 300ms 起始缓冲，让界面先落定
+      }, Math.min(ms * 0.72, 550)));
+    }, at));
   });
 
-  const last = demoSeq[demoSeq.length - 1];
-  const total = (last[1] + last[2]) * noteMs + 300 + 250;
+  const total = t + 300 + 250;
   demoState.timers.push(setTimeout(() => {
     if (demoState.playing) finishDemo(false);
   }, total));
@@ -1386,9 +1424,9 @@ demoBtn.addEventListener('click', () => {
    和"幽灵手"短演示的区别不只是长度，而是**演奏感**：
    - 力度：每句第一音重（1.2）、句末收（0.9），一串等响音听着就是电子音阶
    - 句首加低八度铺底，旋律立刻有"伴奏"，不再像是单音练习
-   - 句末自动多留 5% 时值，句与句之间有了呼吸
+   - 句末长音 PHRASE_TAIL 倍（不是简谱上的 2 倍），句间有呼吸但不空等
    - 极小的长短起伏（±1.4%）：完全等长的音是节拍器，不是演奏
-   全曲 60~110 秒，所以按钮会变成「停止」，随时可以中断。 */
+   按钮会变成「停止」，随时可以中断。 */
 function startMasterDemo() {
   const song = SONG_MAP[followState.songId];
   if (!song) return;
@@ -1403,8 +1441,8 @@ function startMasterDemo() {
   masterBtn.textContent = '停止';
   masterBtn.classList.add('on');
 
-  // 每音时长由「示范速度」决定（慢/标准/快），曲子的 bpm 只用来定"这首该多快"的基准
-  const noteMs = demoNoteMs(song);
+  // 每音时长只由滑块（demoBpm）决定：曲库里的 bpm 是简谱的记法，不是演奏速度
+  const noteMs = demoNoteMs();
   const posMap = [];
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
 
@@ -1413,8 +1451,9 @@ function startMasterDemo() {
     const { pi, ni } = posMap[i];
     const isFirst = ni === 0;
     const isLast = dur > 1;
-    const human = 1 + 0.014 * Math.sin(i * 1.7) + (isLast ? 0.05 : 0);
-    const ms = dur * noteMs * human;
+    // ±1.4% 的长短起伏：完全等长的是节拍器，不是演奏
+    const human = 1 + 0.014 * Math.sin(i * 1.7);
+    const ms = (isLast ? PHRASE_TAIL : 1) * noteMs * human;
     const at = 300 + t;
     t += ms;
 
@@ -1437,7 +1476,7 @@ function startMasterDemo() {
   });
 
   followEl.querySelector('.f-hint').textContent =
-    `全曲示范 · ${DEMO_SPEEDS[demoSpIdx].label}速 · 每音 ${(noteMs / 1000).toFixed(2)} 秒 · 约 ${Math.round(t / 1000)} 秒`;
+    `全曲示范 · ${demoBpm} 拍/分 · 每音 ${(noteMs / 1000).toFixed(2)} 秒 · 约 ${Math.round(t / 1000)} 秒`;
 
   demoState.timers.push(setTimeout(() => {
     if (demoState.playing) finishMasterDemo(false);
