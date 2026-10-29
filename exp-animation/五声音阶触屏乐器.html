@@ -715,14 +715,16 @@ function stopDrone() {
  * @param {number} vel 力度倍数（≈0.85~1.2）。示范时用它做重音与收句的强弱，
  *                     没有力度差的一串等响音听起来就是"电子音阶"，不像演奏。
  */
-function playNote(freq, mode = 'air', vel = 1) {
+function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
   if (!ctx) return null;
   // 上下文被挂起时不要建节点：currentTime 不会走，这批节点会全排在 t=0，
   // 等某次恢复时在同一瞬间齐射（一串爆音），而当下依然是静音。
   if (ctx.state !== 'running') { unlockAudio(); return null; }
   const mood = MOODS[MOOD_KEYS[currentMoodIdx]];
   const isPlay = mode === 'play';
-  const decay = isPlay ? mood.playDecay : mood.decay;
+  // decayScale：示范拉到高速时（每音 340ms）尾音必须跟着变短，否则上一个音的
+  // 0.42s 长尾正好盖住下一个音，整首糊成一团嗡鸣——听感上"快"反而更不清。
+  const decay = (isPlay ? mood.playDecay : mood.decay) * decayScale;
   const attack = isPlay ? 0.006 : 0.02;
   const peak = (isPlay ? 0.30 : 0.35) * Math.max(0.2, Math.min(1.4, vel));
 
@@ -1382,7 +1384,7 @@ function startDemo() {
       // 幽灵手：只用 demo-hit 的底部辉光，不叠整键泛光——满屏高的琴键上
       // 整键泛光会糊成一整根光柱，看起来不像"这个键被按下"
       key.classList.add('demo-hit');
-      playNote(parseFloat(key.dataset.freq), 'play');
+      playNote(parseFloat(key.dataset.freq), 'play', 1, Math.min(1, noteMs / 620));
       spawnRipple(key);
       // 闪光时长跟音符时值走，句末长音多留一会
       demoState.timers.push(setTimeout(() => {
@@ -1443,6 +1445,9 @@ function startMasterDemo() {
 
   // 每音时长只由滑块（demoBpm）决定：曲库里的 bpm 是简谱的记法，不是演奏速度
   const noteMs = demoNoteMs();
+  // 尾音长度跟着音距走：<=620ms 起按比例收短（341ms 时收到约 0.55 倍），
+  // 保证"上一个音散掉之后，下一个音才进来"
+  const tailScale = Math.min(1, noteMs / 620);
   const posMap = [];
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
 
@@ -1465,7 +1470,7 @@ function startMasterDemo() {
       const key = keyEls[k];
       key.classList.add('demo-hit');
       const freq = parseFloat(key.dataset.freq);
-      playNote(freq, 'play', isFirst ? 1.2 : isLast ? 0.9 : 1.0);
+      playNote(freq, 'play', isFirst ? 1.2 : isLast ? 0.9 : 1.0, tailScale);
       if (isFirst) playBass(freq);
       spawnRipple(key);
       demoState.timers.push(setTimeout(() => {
