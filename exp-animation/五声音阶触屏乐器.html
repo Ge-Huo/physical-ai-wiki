@@ -349,6 +349,15 @@
     transition: transform 0.15s, color 0.15s, opacity 0.15s;
   }
   #follow .f-note sup { font-size: 9px; vertical-align: super; }
+  /* 半拍音：简谱的"下加一线"。用伪元素画线而不是 text-decoration，
+     因为 text-decoration 会连上高高在上的高音点，看起来像错位 */
+  #follow .f-note.short { position: relative; }
+  #follow .f-note.short::after {
+    content: ''; position: absolute; left: 3px; right: 3px; bottom: 2px;
+    height: 1.5px; background: currentColor; opacity: 0.7;
+  }
+  /* 长音：右侧留一点空白，谱面宽度就跟着时间走了——哪个音要拖，一眼能看见 */
+  #follow .f-note.long { margin-right: 5px; }
   /* 已弹过的音：暗下去但保留位置。!important 压过 inline 的键色 */
   #follow .f-note.done { color: rgba(255,255,255,0.16) !important; }
   /* 当前音：放大 + 用琴键专属颜色点亮，颜色即"按哪个键"的直接暗示 */
@@ -612,9 +621,43 @@ const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer: coarse)').ma
 const DRONE_LEVEL = IS_TOUCH ? 0.026 : 0.05;
 
 let ctx, masterGain, droneOscs = [];
+// 混响发送口。所有音符扇出一小部分信号到这里，混完再回 master。
+// 没有混响的声音像"贴着耳朵按琴键"，而电视/唱片里听到的一切都发生在某个空间里，
+// 有早期反射和尾巴——这一条是"像演奏"和"像电子琴"之间最省力的差距。
+let revIn = null;
 // 手机默认「关」：外放听不出氛围、只剩嗡嗡；电脑默认「空灵」
 let currentMoodIdx = IS_TOUCH ? MOOD_KEYS.indexOf('off') : 0;
 let isAudioStarted = false;
+
+/**
+ * 脉冲响应自己生成：指数衰减的白噪声，前 4ms 淡入避免爆音，双声道各自独立
+ * 才有宽度（左右不完全一样，听感才是"空间"而不是"单声道回声"）。
+ * 不引外部 wav——单文件 HTML 必须能离线打开。
+ */
+function makeImpulse(sec, decay) {
+  const rate = ctx.sampleRate;
+  const len = Math.max(1, Math.floor(rate * sec));
+  const buf = ctx.createBuffer(2, len, rate);
+  const gate = rate * 0.004;
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const k = i / len;
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - k, decay) * (1 - Math.exp(-i / gate));
+    }
+  }
+  return buf;
+}
+
+function buildReverb() {
+  const conv = ctx.createConvolver();
+  conv.buffer = makeImpulse(1.6, 3.2);
+  const wet = ctx.createGain();
+  wet.gain.value = 0.22;      // 干湿比：刚好听出"房间"，但不糊掉旋律的轮廓
+  revIn = ctx.createGain();
+  revIn.gain.value = 1;
+  revIn.connect(conv).connect(wet).connect(masterGain);
+}
 
 function initAudio() {
   if (isAudioStarted) return;
@@ -623,7 +666,17 @@ function initAudio() {
   ctx = new AC();
   masterGain = ctx.createGain();
   masterGain.gain.value = 0.6;
-  masterGain.connect(ctx.destination);
+  // 限幅器兜底：加了泛音层和和声垫之后，滑音连奏时三四个音会叠在一起，
+  // 峰值相加有可能冲过 0 dB，手机小喇叭上就是"噗"的一下破音。
+  // 阈值 -6dB 只在峰值附近介入，正常的力度起伏完全不受影响。
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -6;
+  limiter.knee.value = 6;
+  limiter.ratio.value = 8;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.14;
+  masterGain.connect(limiter).connect(ctx.destination);
+  buildReverb();
   startDrone();
   isAudioStarted = true;
   // 浏览器（尤其桌面 Chrome/Edge、以及开了"阻止自动播放"的情况）经常把新建的
@@ -722,10 +775,11 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
   if (ctx.state !== 'running') { unlockAudio(); return null; }
   const mood = MOODS[MOOD_KEYS[currentMoodIdx]];
   const isPlay = mode === 'play';
+  const now = ctx.currentTime;
   // decayScale：示范拉到高速时（每音 340ms）尾音必须跟着变短，否则上一个音的
   // 0.42s 长尾正好盖住下一个音，整首糊成一团嗡鸣——听感上"快"反而更不清。
   const decay = (isPlay ? mood.playDecay : mood.decay) * decayScale;
-  const attack = isPlay ? 0.006 : 0.02;
+  const attack = isPlay ? 0.005 : 0.018;
   const peak = (isPlay ? 0.30 : 0.35) * Math.max(0.2, Math.min(1.4, vel));
 
   const osc = ctx.createOscillator();
@@ -736,44 +790,95 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
   osc.frequency.value = freq;
 
   filter.type = 'lowpass';
-  filter.Q.value = 2;
+  filter.Q.value = 1.6;
   // 滑音时滤波起点抬高，音头更"脆"，连续五个音才分得开
-  filter.frequency.setValueAtTime(mood.filterFreq * (isPlay ? 3.2 : 2), ctx.currentTime);
-  filter.frequency.exponentialRampToValueAtTime(mood.filterFreq * 0.5, ctx.currentTime + decay);
+  filter.frequency.setValueAtTime(mood.filterFreq * (isPlay ? 3.6 : 2.2), now);
+  filter.frequency.exponentialRampToValueAtTime(mood.filterFreq * 0.55, now + decay);
 
-  gain.gain.setValueAtTime(0, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(peak, ctx.currentTime + attack);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + decay);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(peak, now + attack);
+  // 两段衰减：先快速落一半（拨弦 / 吹奏的"音头"），再慢速走余韵。
+  // 单段指数衰减听起来像"电子琴按住不放再渐弱"，没有"击"的那一下。
+  gain.gain.exponentialRampToValueAtTime(peak * 0.42, now + Math.max(attack + 0.03, decay * 0.2));
+  gain.gain.exponentialRampToValueAtTime(0.0008, now + decay);
 
-  osc.connect(filter).connect(gain).connect(masterGain);
-  osc.start();
-  osc.stop(ctx.currentTime + decay + 0.1);
+  osc.connect(filter).connect(gain);
+
+  // 泛音层：单个 triangle 是"圆润的电子音"，叠上八度、十二度泛音才有弦/木的亮与芯。
+  // 音量按 1 : 0.22 : 0.085 递减，总响度几乎不变，频谱却不再是三根干净的正弦——
+  // 这是"像乐器"和"像蜂鸣器"的分界。泛音衰减更快（高次泛音先消失，自然规律）。
+  [[2, 0.22], [3, 0.085]].forEach(([mul, amp]) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq * mul;
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(peak * amp, now + attack);
+    g.gain.exponentialRampToValueAtTime(0.0005, now + decay * 0.5);
+    o.connect(g).connect(filter);
+    o.start(now); o.stop(now + decay * 0.55 + 0.05);
+  });
+
+  // 颤音：只给长音，短音（半拍 170~280ms）会抖成"坏喇叭"。
+  // 人唱或拉长音时音高本来就在微微游移；完全平直的波形是"合成器"最刺耳的特征。
+  if (decay > 0.6 && freq > 160) {
+    const lfo = ctx.createOscillator();
+    const lg = ctx.createGain();
+    lfo.frequency.value = 4.8;
+    lg.gain.setValueAtTime(0, now);
+    lg.gain.setValueAtTime(0, now + 0.18);          // 音头别抖，稳住再颤
+    lg.gain.linearRampToValueAtTime(freq * 0.0055, now + 0.5);
+    lfo.connect(lg).connect(osc.frequency);
+    lfo.start(now); lfo.stop(now + decay + 0.05);
+  }
+
+  gain.connect(masterGain);
+  if (revIn) {
+    // 混响发送量跟着时值走：半拍音（170~280ms）一个接一个时，如果每个都送满，
+    // 1.6 秒的尾巴会叠成一片雾，旋律反而糊了。短音少送、长音送满，
+    // 空间感还在，但"一串快音"仍然是一颗一颗的。
+    const send = ctx.createGain();
+    send.gain.value = 0.28 + 0.72 * Math.min(1, decay / 0.5);
+    gain.connect(send).connect(revIn);
+  }
+  osc.start(now);
+  osc.stop(now + decay + 0.1);
 
   return { osc, gain, filter };
 }
 
 /**
- * 全曲示范用的低八度铺底，只在每句第一音（强拍）触发。
- * 用 triangle 而不是 sine：手机外放推不动 130Hz 的正弦波，
- * 有奇次谐波才听得见"下面还有个低音"，不至于糊成嗡嗡。
+ * 句子和声垫：每句首音起一个长音，撑住整句（替代原来只有一个低八度短音）。
+ * 三层八度叠置（低八度 / 本音 / 高八度）+ 460Hz 低通，听感是
+ * "下面有个和声在托着旋律"，而不是又多出一条旋律来打架。
+ * 为什么用八度而不是三度、五度：五声音阶里任何音叠八度永远协和，
+ * 换句子换根音也不会撞音——这是最不容易出错的伴奏写法。
  */
-function playBass(freq) {
+function playPad(freq, ms) {
   if (!ctx || ctx.state !== 'running') return;
   const t = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
-  osc.type = 'triangle';
-  osc.frequency.value = freq / 2;
-  filter.type = 'lowpass';
-  filter.frequency.value = 420;
-  filter.Q.value = 0.7;
-  const peak = IS_TOUCH ? 0.05 : 0.10;
-  gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(peak, t + 0.035);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
-  osc.connect(filter).connect(gain).connect(masterGain);
-  osc.start(t); osc.stop(t + 1.7);
+  const dur = Math.max(0.7, Math.min(4.5, ms / 1000));
+  const peak = IS_TOUCH ? 0.05 : 0.085;
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = 460;
+  filt.Q.value = 0.7;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t + 0.05);
+  g.gain.setTargetAtTime(0.0001, t + dur * 0.5, dur * 0.3);
+  filt.connect(g);
+  g.connect(masterGain);
+  if (revIn) g.connect(revIn);
+  [[0.5, 1.0], [1, 0.5], [2, 0.2]].forEach(([mul, amp]) => {
+    const o = ctx.createOscillator();
+    const og = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = freq * mul;
+    og.gain.value = amp;
+    o.connect(og).connect(filt);
+    o.start(t); o.stop(t + dur + 0.5);
+  });
 }
 
 /**
@@ -1090,8 +1195,30 @@ const SONGS = [
 ];
 
 /**
+ * 一句话里 n 个音各自的时值（单位：拍）。
+ *
+ * 这是"有没有音乐性"的地基。原先每音一律 1 拍、句末 2 拍——那是**音阶练习**的写法：
+ * 音高全对也像在按琴键考级，因为真实旋律的第一特征是长短相间（节奏），不是音程。
+ * 中文歌词的节奏天然是"前短后长"：开头一两个字一口气带过，句末拖着收。
+ * 所以取：前两字半拍、句末一拍半、中间每隔三个音插一个半拍，形成
+ * "紧-紧-松-紧-松"的呼吸。5 音句恰好是 [.5 .5 1 .5 1.5] = 4 拍一小节，
+ * 就是《沧海一声笑》"沧海一声笑"的唱法（苍-海 飞快，一 站住，声 一带，笑 拖住）。
+ *
+ * 注意：这里给的是**相对时值**，绝对快慢仍由速度滑块决定，两者互不干扰。
+ */
+function rhythmOf(n) {
+  if (n <= 1) return [2];
+  const d = new Array(n).fill(1);
+  d[n - 1] = 1.5;                       // 句末拖住
+  if (n >= 3) d[0] = 0.5;               // 弱起
+  if (n >= 4) d[1] = 0.5;
+  for (let i = 2; i < n - 1; i++) if ((i - 3) % 3 === 0) d[i] = 0.5;
+  return d;
+}
+
+/**
  * 把 phrases 派生成瀑布流引擎需要的数据结构。
- * 每音 1 拍、句末音 2 拍；lyrics 记录每句的起始拍。
+ * 时值由 rhythmOf() 派生；lyrics 记录每句的起始拍。
  */
 function buildSong(def) {
   const seq = [];
@@ -1099,8 +1226,9 @@ function buildSong(def) {
   let beat = 0;
   for (const p of def.phrases) {
     lyrics.push({ beat, text: p.text });
+    const durs = p.rhythm || rhythmOf(p.notes.length);
     p.notes.forEach((k, i) => {
-      const dur = i === p.notes.length - 1 ? 2 : 1;
+      const dur = durs[i] || 1;
       seq.push([k, beat, dur]);
       beat += dur;
     });
@@ -1298,11 +1426,9 @@ try {
   if (v >= DEMO_BPM.min && v <= DEMO_BPM.max) demoBpm = v;
 } catch (e) {}
 
-// 句末长音相对普通音的倍数。2 拍是简谱写法、不是唱法：按 2 倍弹，
-// 每个乐句末尾都要空出整整一个音的时间，20 句积起来就是二十几秒的死气。
-const PHRASE_TAIL = 1.4;
-
-// 每音时长（ms）。demoBpm = 每分钟多少个音，直接取倒数
+// 每「拍」多长（ms）。demoBpm = 每分钟多少拍，直接取倒数。
+// 注意这是**拍**，不是**音**：加了 rhythmOf 之后一个音可能只占半拍或一拍半，
+// 所以"这首歌多快"不再等于"每个音多快"——这正是旋律和音阶的区别。
 function demoNoteMs() { return 60000 / demoBpm; }
 
 const rangeEl = followEl.querySelector('.f-range');
@@ -1368,23 +1494,32 @@ function startDemo() {
   const demoSeq = song.seq.filter((_, i) => posMap[i].pi < firstVerse);
   const demoPos = posMap.filter(p => p.pi < firstVerse);
 
-  // 时间轴自己累加，不再用 seq 里的累计拍数：句末长音已改成 PHRASE_TAIL 倍，
-  // 累计拍数（句末算 2 拍）和真实时长对不上了，继续拿它换算会让画面早于声音。
+  // 时间轴自己累加：seq 里的 dur 已经是 rhythmOf 给的真实时值（0.5 / 1 / 1.5），
+  // 直接乘「每拍毫秒」就是音符该占多久，画面和声音不会错位。
   let t = 0;
   demoSeq.forEach(([k, , dur], i) => {
-    const ms = (dur > 1 ? PHRASE_TAIL : 1) * noteMs;
+    const { pi, ni } = posMap[i];
+    const p = song.phrases[pi];
+    const isFirst = ni === 0;
+    const prog = ni / Math.max(1, p.notes.length - 1);
+    const ms = dur * noteMs;
+    const vel = (0.94 + 0.20 * Math.sin(Math.PI * prog)) * (ni === p.notes.length - 1 ? 0.96 : 1);
     const at = 300 + t;   // 300ms 起始缓冲，让界面先落定
     t += ms;
     demoState.timers.push(setTimeout(() => {
       if (!demoState.playing) return;
-      followState.phrase = posMap[i].pi;
-      followState.note = posMap[i].ni;
+      followState.phrase = pi;
+      followState.note = ni;
       renderFollow();
       const key = keyEls[k];
       // 幽灵手：只用 demo-hit 的底部辉光，不叠整键泛光——满屏高的琴键上
       // 整键泛光会糊成一整根光柱，看起来不像"这个键被按下"
       key.classList.add('demo-hit');
-      playNote(parseFloat(key.dataset.freq), 'play', 1, Math.min(1, noteMs / 620));
+      // 尾音跟音符时值走：长音给足余韵，半拍音立刻收干（否则短音被上一条尾巴糊掉）
+      playNote(parseFloat(key.dataset.freq), 'play', vel, Math.max(0.5, Math.min(2.2, ms / 420)));
+      // 短演示也带和声垫：先听惯"旋律 + 伴奏"的样子，自己弹时才不会觉得空
+      if (isFirst) playPad(parseFloat(key.dataset.freq),
+        (p.rhythm || rhythmOf(p.notes.length)).reduce((a, b) => a + b, 0) * noteMs);
       spawnRipple(key);
       // 闪光时长跟音符时值走，句末长音多留一会
       demoState.timers.push(setTimeout(() => {
@@ -1423,11 +1558,14 @@ demoBtn.addEventListener('click', () => {
 });
 
 /* ===== 全曲示范：把整首从头到尾弹一遍 =====
-   和"幽灵手"短演示的区别不只是长度，而是**演奏感**：
-   - 力度：每句第一音重（1.2）、句末收（0.9），一串等响音听着就是电子音阶
-   - 句首加低八度铺底，旋律立刻有"伴奏"，不再像是单音练习
-   - 句末长音 PHRASE_TAIL 倍（不是简谱上的 2 倍），句间有呼吸但不空等
-   - 极小的长短起伏（±1.4%）：完全等长的音是节拍器，不是演奏
+   和"幽灵手"短演示的区别不只是长度，而是**演奏感**。让它像音乐而不是像
+   音阶练习，靠的是下面这些叠起来的东西（缺任何一个都会立刻"电子"回去）：
+   - 时值：rhythmOf() 给的长短（半拍带过、句末拖住），不是每音等长
+   - 力度：句腰最响、两头收的连续弧线，不是"重/中/轻"三档开关
+   - 和声：每句首音起一条八度叠置的长音垫在下面，旋律不再孤零零
+   - 音色：主音 + 八度/十二度泛音 + 长音颤音 + 两段衰减（见 playNote）
+   - 空间：音符送进卷积混响，声音在一个"房间"里，不是贴着耳朵发声
+   - 微起伏：±1.4% 的长短漂移，完全等长的是节拍器，不是演奏
    按钮会变成「停止」，随时可以中断。 */
 function startMasterDemo() {
   const song = SONG_MAP[followState.songId];
@@ -1443,24 +1581,31 @@ function startMasterDemo() {
   masterBtn.textContent = '停止';
   masterBtn.classList.add('on');
 
-  // 每音时长只由滑块（demoBpm）决定：曲库里的 bpm 是简谱的记法，不是演奏速度
+  // 每拍毫秒只由滑块（demoBpm）决定：曲库里的 bpm 是简谱的记法，不是演奏速度
   const noteMs = demoNoteMs();
-  // 尾音长度跟着音距走：<=620ms 起按比例收短（341ms 时收到约 0.55 倍），
-  // 保证"上一个音散掉之后，下一个音才进来"
-  const tailScale = Math.min(1, noteMs / 620);
   const posMap = [];
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
+  // 每句总时长：和声垫要撑满整句，不能按固定长度给，否则句子一长后半句就"空"了
+  const phraseMs = song.phrases.map(p =>
+    (p.rhythm || rhythmOf(p.notes.length)).reduce((a, b) => a + b, 0) * noteMs);
 
   let t = 0;
   song.seq.forEach(([k, beat, dur], i) => {
     const { pi, ni } = posMap[i];
+    const p = song.phrases[pi];
     const isFirst = ni === 0;
-    const isLast = dur > 1;
+    const isLast = ni === p.notes.length - 1;
     // ±1.4% 的长短起伏：完全等长的是节拍器，不是演奏
     const human = 1 + 0.014 * Math.sin(i * 1.7);
-    const ms = (isLast ? PHRASE_TAIL : 1) * noteMs * human;
+    // 时值直接来自 rhythmOf：半拍 / 一拍 / 一拍半，这才是旋律不是音阶
+    const ms = dur * noteMs * human;
     const at = 300 + t;
     t += ms;
+
+    // 力度弧线：句腰最响、两头收。原来的固定三档（重 / 中 / 轻）听感还是
+    // "逐个音开关音量"，一条连续起伏才像"一口气唱完一句"。
+    const prog = ni / Math.max(1, p.notes.length - 1);
+    const vel = (0.94 + 0.20 * Math.sin(Math.PI * prog)) * (isLast ? 0.96 : 1);
 
     demoState.timers.push(setTimeout(() => {
       if (!demoState.playing) return;
@@ -1470,8 +1615,12 @@ function startMasterDemo() {
       const key = keyEls[k];
       key.classList.add('demo-hit');
       const freq = parseFloat(key.dataset.freq);
-      playNote(freq, 'play', isFirst ? 1.2 : isLast ? 0.9 : 1.0, tailScale);
-      if (isFirst) playBass(freq);
+      // 尾音填满这个音自己的时值：半拍音立刻收干（不糊掉下一个音），
+      // 句末长音给足余韵。音有长短这件事，一半靠时值、一半靠余音，
+      // 两者同时对，耳朵才认得出"这是一句歌"。
+      playNote(freq, 'play', vel, Math.max(0.5, Math.min(2.2, ms / 420)));
+      // 和声垫：每句首音起一条长音托住整句，旋律下面终于有"第二声部"
+      if (isFirst) playPad(freq, phraseMs[pi]);
       spawnRipple(key);
       demoState.timers.push(setTimeout(() => {
         if (!demoState.playing) return;
@@ -1481,7 +1630,7 @@ function startMasterDemo() {
   });
 
   followEl.querySelector('.f-hint').textContent =
-    `全曲示范 · ${demoBpm} 拍/分 · 每音 ${(noteMs / 1000).toFixed(2)} 秒 · 约 ${Math.round(t / 1000)} 秒`;
+    `全曲示范 · ${demoBpm} 拍/分 · 每拍 ${(noteMs / 1000).toFixed(2)} 秒 · 约 ${Math.round(t / 1000)} 秒`;
 
   demoState.timers.push(setTimeout(() => {
     if (demoState.playing) finishMasterDemo(false);
@@ -1577,9 +1726,14 @@ function renderFollow() {
 
     const ns = document.createElement('span');
     ns.className = 'r-notes';
+    // 时值写进谱面：半拍音下加一线（简谱的八分音符写法），长音右侧留白。
+    // 不加这个，用户听到的长短和谱上看到的等宽就对不上——"学不会"往往
+    // 不是手慢，而是谱子里根本没说哪个音要拖、哪个音要带过。
+    const durs = p.rhythm || rhythmOf(p.notes.length);
     p.notes.forEach((k, i) => {
       const span = document.createElement('span');
-      span.className = 'f-note';
+      const d = durs[i] || 1;
+      span.className = 'f-note' + (d < 1 ? ' short' : d > 1 ? ' long' : '');
       span.style.color = KEY_COLORS[k];
       span.innerHTML = NUM_LABELS[k] + (k === 5 ? '<sup>·</sup>' : '');
       const isPast = pi < followState.phrase || (pi === followState.phrase && i < followState.note);
@@ -1673,8 +1827,11 @@ function followJudge(idx) {
   // 弹错键：不出声地等（那个键还是会发它自己的音），不前进、不提示
   if (idx !== p.notes[followState.note]) return;
 
-  // 记下刚弹完这个音的时值：句末是 2 拍，节拍提示据此把句间的"呼吸"留出来
-  const durBeats = followState.note === p.notes.length - 1 ? 2 : 1;
+  // 记下刚弹完这个音的时值：节拍提示据此把下一拍的间隔摆对。
+  // 时值取 rhythmOf 的真实值（0.5 / 1 / 1.5），不再是"句末 2 拍、其余 1 拍"——
+  // 否则提示音会跟示范的速度对不上，学着学着就乱了。
+  const durs = p.rhythm || rhythmOf(p.notes.length);
+  const durBeats = durs[followState.note] || 1;
 
   followState.note++;
   if (followState.note >= p.notes.length) {
