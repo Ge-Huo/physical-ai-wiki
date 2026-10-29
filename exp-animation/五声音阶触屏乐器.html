@@ -64,16 +64,20 @@
   .key.active .label i { opacity: 0.85; }
 
   /* 每个键独立配色。--glow 是按下时的整键底色，--pulse 是指引辉光的颜色（带透明度） */
-  .key:nth-child(1) { --glow: rgba(100,180,255,0.15); --color: #64b4ff; --pulse: rgba(100,180,255,0.55); }
-  .key:nth-child(2) { --glow: rgba(130,220,180,0.15); --color: #82dcb4; --pulse: rgba(130,220,180,0.52); }
-  .key:nth-child(3) { --glow: rgba(255,200,100,0.15); --color: #ffc864; --pulse: rgba(255,200,100,0.55); }
-  .key:nth-child(4) { --glow: rgba(220,140,180,0.15); --color: #dc8cb4; --pulse: rgba(220,140,180,0.55); }
-  .key:nth-child(5) { --glow: rgba(180,140,255,0.15); --color: #b48cff; --pulse: rgba(180,140,255,0.58); }
-  /* 第 6 键是高八度的宫，沿用第 1 键的蓝，视觉上形成一次音阶循环 */
-  .key:nth-child(6) { --glow: rgba(100,180,255,0.18); --color: #7cc4ff; --pulse: rgba(124,196,255,0.58); }
+  /* 前两键是低音区的徵、羽：用压暗的同色系，一眼能看出"这两个比中间低一档" */
+  .key:nth-child(1) { --glow: rgba(63,127,191,0.16); --color: #3f8fd8; --pulse: rgba(63,143,216,0.5); }
+  .key:nth-child(2) { --glow: rgba(74,150,170,0.16); --color: #4f9fb5; --pulse: rgba(79,159,181,0.5); }
+  .key:nth-child(3) { --glow: rgba(100,180,255,0.15); --color: #64b4ff; --pulse: rgba(100,180,255,0.55); }
+  .key:nth-child(4) { --glow: rgba(130,220,180,0.15); --color: #82dcb4; --pulse: rgba(130,220,180,0.52); }
+  .key:nth-child(5) { --glow: rgba(255,200,100,0.15); --color: #ffc864; --pulse: rgba(255,200,100,0.55); }
+  .key:nth-child(6) { --glow: rgba(220,140,180,0.15); --color: #dc8cb4; --pulse: rgba(220,140,180,0.55); }
+  .key:nth-child(7) { --glow: rgba(180,140,255,0.15); --color: #b48cff; --pulse: rgba(180,140,255,0.58); }
+  /* 最后一键是高八度的宫，沿用中间宫的蓝，视觉上形成一次音阶循环 */
+  .key:nth-child(8) { --glow: rgba(100,180,255,0.18); --color: #7cc4ff; --pulse: rgba(124,196,255,0.58); }
 
-  /* 高音标记：简谱在数字上方加点，这里用 sup 模拟 */
+  /* 高低音标记：简谱在数字上方加点表示高八度、下方加点表示低八度 */
   .key .label sup { font-size: 9px; vertical-align: super; opacity: 0.65; margin-left: 1px; }
+  .key .label sub { font-size: 9px; vertical-align: sub; opacity: 0.65; margin-left: 1px; }
 
   /* 涟漪反馈 */
   .ripple {
@@ -595,11 +599,14 @@
 
 <script>
 // ========== 音频引擎 ==========
-// 五声音阶（宫商角徵羽）+ 高八度的宫，共 6 键。
-// 加第 6 键是为了让《茉莉花》那类需要高音 do 的曲子能弹下来。
-const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // C4 D4 E4 G4 A4 C5
-// 简谱数字：宫1 商2 角3 徵5 羽6 高音宫1。琴键与跟弹条共用这一份映射。
-const NUM_LABELS = ['1', '2', '3', '5', '6', '1'];
+// 五声音阶（宫商角徵羽），往下补两个低音、往上补一个高音宫，共 8 键：
+//   低音徵 5̣ · 低音羽 6̣ · 宫1 商2 角3 徵5 羽6 · 高音宫1̇
+// 为什么非要往下补这两个：唱《沧海一声笑》「滔滔两岸潮」时，旋律是 3 2 1 6̣ 5̣——
+// 一路往下走到低音徵。只有六键时只能"同八度代替"，那句会变成往上跳一个六度，
+// 而这一跳正是这首歌最认得出的地方。听不出是哪首，一半是这个原因。
+const PENTATONIC = [196.00, 220.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // G3 A3 C4 D4 E4 G4 A4 C5
+// 简谱数字：低音5 低音6 宫1 商2 角3 徵5 羽6 高音宫1。琴键与跟弹条共用这一份映射。
+const NUM_LABELS = ['5', '6', '1', '2', '3', '5', '6', '1'];
 const MOODS = {
   // decay     —— 单击时的长尾音，负责空间感
   // playDecay —— 滑音时的短尾音，负责旋律清晰度。尾音必须明显短于按键间隔，
@@ -767,8 +774,11 @@ function stopDrone() {
  *   play —— 滑音：短尾音 + 快起音 + 更亮的滤波起点，让一串音前后分明
  * @param {number} vel 力度倍数（≈0.85~1.2）。示范时用它做重音与收句的强弱，
  *                     没有力度差的一串等响音听起来就是"电子音阶"，不像演奏。
+ * @param {number} holdMs 这个音要"按住"多久。谱面上的长音（沧海句末的「1 -」要两拍）
+ *                     如果按普通衰减走，40 毫秒就散掉了——听起来是一串点，不是一句歌。
+ *                     给了它，包络就改成"起音 → 落到持续电平 → 撑住 → 收尾"。
  */
-function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
+function playNote(freq, mode = 'air', vel = 1, decayScale = 1, holdMs = 0) {
   if (!ctx) return null;
   // 上下文被挂起时不要建节点：currentTime 不会走，这批节点会全排在 t=0，
   // 等某次恢复时在同一瞬间齐射（一串爆音），而当下依然是静音。
@@ -785,6 +795,10 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
+  // 这个音实际要响多久：普通音就是 decay，长音是谱面给的长度（holdMs）
+  const hold = Math.max(0, (holdMs || 0) / 1000);
+  const sustaining = hold > decay + 0.12;      // 只有明显长于自然衰减才值得"撑住"
+  const endAt = sustaining ? hold : decay;
 
   osc.type = 'triangle';
   // 上滑起音：民族乐器几乎每一个音都是"滑进去"的——笛子的气冲、古筝的按音、
@@ -797,14 +811,23 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
   filter.Q.value = 1.6;
   // 滑音时滤波起点抬高，音头更"脆"，连续五个音才分得开
   filter.frequency.setValueAtTime(mood.filterFreq * (isPlay ? 3.6 : 2.2), now);
-  filter.frequency.exponentialRampToValueAtTime(mood.filterFreq * 0.55, now + decay);
+  filter.frequency.exponentialRampToValueAtTime(mood.filterFreq * 0.55, now + Math.min(decay, endAt));
 
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(peak, now + attack);
   // 两段衰减：先快速落一半（拨弦 / 吹奏的"音头"），再慢速走余韵。
   // 单段指数衰减听起来像"电子琴按住不放再渐弱"，没有"击"的那一下。
   gain.gain.exponentialRampToValueAtTime(peak * 0.42, now + Math.max(attack + 0.03, decay * 0.2));
-  gain.gain.exponentialRampToValueAtTime(0.0008, now + decay);
+  if (sustaining) {
+    // 长音：衰减到持续电平后**撑住**，再在句末收掉。
+    // 这一步是"像人唱"的关键——人唱「笑」能一口气拖两拍，而一个衰减完的音
+    // 永远停在 40 毫秒那一刻，听感就是"点了下鼠标"。
+    gain.gain.exponentialRampToValueAtTime(peak * 0.26, now + decay);
+    gain.gain.setValueAtTime(peak * 0.26, now + Math.max(decay, hold - 0.22));
+    gain.gain.exponentialRampToValueAtTime(0.0008, now + hold);
+  } else {
+    gain.gain.exponentialRampToValueAtTime(0.0008, now + decay);
+  }
 
   osc.connect(filter).connect(gain);
 
@@ -825,7 +848,7 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
 
   // 颤音：只给长音，短音（半拍 170~280ms）会抖成"坏喇叭"。
   // 人唱或拉长音时音高本来就在微微游移；完全平直的波形是"合成器"最刺耳的特征。
-  if (decay > 0.6 && freq > 160) {
+  if ((decay > 0.6 || sustaining) && freq > 160) {
     const lfo = ctx.createOscillator();
     const lg = ctx.createGain();
     lfo.frequency.value = 4.8;
@@ -833,7 +856,7 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
     lg.gain.setValueAtTime(0, now + 0.18);          // 音头别抖，稳住再颤
     lg.gain.linearRampToValueAtTime(freq * 0.0055, now + 0.5);
     lfo.connect(lg).connect(osc.frequency);
-    lfo.start(now); lfo.stop(now + decay + 0.05);
+    lfo.start(now); lfo.stop(now + endAt + 0.05);
   }
 
   gain.connect(masterGain);
@@ -846,7 +869,7 @@ function playNote(freq, mode = 'air', vel = 1, decayScale = 1) {
     gain.connect(send).connect(revIn);
   }
   osc.start(now);
-  osc.stop(now + decay + 0.1);
+  osc.stop(now + endAt + 0.1);
 
   return { osc, gain, filter };
 }
@@ -981,8 +1004,17 @@ function playTick(accent) {
 }
 
 // ========== UI 构建 ==========
-const NOTE_NAMES = ['宫', '商', '角', '徵', '羽', '宫'];
-const HIGH_DOT = 5; // 第 6 键是高八度的宫，按简谱习惯在右上角加高音点
+const NOTE_NAMES = ['徵', '羽', '宫', '商', '角', '徵', '羽', '宫'];
+const HIGH_DOT = 7;   // 最后一键是高八度的宫，按简谱习惯在右上角加高音点
+const LOW_KEYS = [0, 1]; // 最前两键是低八度的徵、羽，简谱在数字下方加低音点
+
+/** 简谱写法：低音点在下、高音点在上。琴键、跟弹条、曲目预览共用这一份。 */
+function noteLabel(k) {
+  const base = NUM_LABELS[k] || '';
+  if (k === HIGH_DOT) return base + '<sup>·</sup>';
+  if (k < 2) return base + '<sub>·</sub>';
+  return base;
+}
 const keysContainer = document.getElementById('keys');
 
 PENTATONIC.forEach((freq, i) => {
@@ -990,9 +1022,8 @@ PENTATONIC.forEach((freq, i) => {
   key.className = 'key';
   key.dataset.freq = freq;
   key.dataset.idx = i; // 曲目模式判定要用键序号
-  const dot = i === HIGH_DOT ? '<sup>·</sup>' : '';
-  // 数字在上（简谱，跟弹条用的就是它）、唱名在下；高音宫的数字右上角加点
-  key.innerHTML = `<span class="label"><b>${NUM_LABELS[i]}${dot}</b><i>${NOTE_NAMES[i]}</i></span>`;
+  // 数字在上（简谱，跟弹条用的就是它）、唱名在下；低音加点在下、高音加点在上
+  key.innerHTML = `<span class="label"><b>${noteLabel(i)}</b><i>${NOTE_NAMES[i]}</i></span>`;
   keysContainer.appendChild(key);
 });
 // 琴键引用。必须在任何 ripple 挂进 #keys 之前取，否则 children 里会混进涟漪元素
@@ -1135,170 +1166,184 @@ moodBtn.addEventListener('click', () => {
 //   漏掉 → 音符静静飘过，不弹错误提示。
 // 零基础用户要的是"我在弹一首歌"的确定感，任何扣分都会立刻打断这种幻觉。
 
-const KEY_COLORS = ['#64b4ff', '#82dcb4', '#ffc864', '#dc8cb4', '#b48cff', '#7cc4ff'];
+const KEY_COLORS = ['#3f8fd8', '#4f9fb5', '#64b4ff', '#82dcb4', '#ffc864', '#dc8cb4', '#b48cff', '#7cc4ff'];
 
 /**
- * 曲库。所有曲目都只用六键（1 2 3 5 6 1'），凡原曲出现 4、7 或低八度音的，
- * 一律按"同八度代替"处理并在注释里说明——目标是新手能弹，不是学术考据。
- * phrases：一句一段，notes 是键序号序列；每音 1 拍、句末音 2 拍，
- * 由 buildSong() 派生出瀑布流需要的时间轴（seq/lyrics）。
+ * 曲库。八键对应：
+ *   0 低音徵 5̣ ｜ 1 低音羽 6̣ ｜ 2 宫1 ｜ 3 商2 ｜ 4 角3 ｜ 5 徵5 ｜ 6 羽6 ｜ 7 高音宫1̇
+ * （简谱里凡出现 4、7 的，五声调式本来就不用，曲库不需要处理。）
+ *
+ * phrases：一句一段，notes 是键序号序列。时值不写在数据里，由 dursOf() 按
+ * 每首曲子的节奏型（RHYTHMS）派生——那是照谱面抄的附点、十六分与句末长音。
+ * 想给某一句单独写节奏，在那句上挂一个 rhythm: [...]（单位：拍）即可覆盖。
  */
 const SONGS = [
   {
-    // 黄霑词曲。全曲五段共用同一个「逐级下行」旋律动机，这是它最适合新手的原因：
-    // 学会一段 = 学会全曲。groups 告诉简谱表在哪里分段留白。
-    id: 'canghai', title: '沧海一声笑', bpm: 66,
+    // 黄霑词曲，1=A 4/4，谱面 ♩=69（唱片也是这个速度）。
+    // 旋律按谱走：每句起手是一个"附点 + 十六分"（6·5 / 3·2），第三句沉到低音区
+    // 5̣ 6̣ 来回（"浮沉随浪"），末句 6·5 3 2 1 2 收在 2 上。
+    // "滔滔两岸潮"的 3 2 1 6̣ 5̣ 是这首歌的签名——一路往下走到低音徵。
+    // 六键版本只能同八度代替，那一句会变成往上跳六度，听起来就不像了。
+    id: 'canghai', title: '沧海一声笑', bpm: 69,
     groups: [4, 4, 4, 4, 4],
     phrases: [
-      // 6 5 3 2 1 ｜ 3 2 1 6 5（原曲这两句有低八度，同八度代替，走向仍是连续下行）
-      { text: '沧海一声笑', notes: [4, 3, 2, 1, 0] },
-      { text: '滔滔两岸潮', notes: [2, 1, 0, 4, 3] },
-      // 5 6 5 6 1'（原曲爬向高音 5，这里把顶点交给高音宫）
-      { text: '浮沉随浪', notes: [3, 4, 3, 4, 5] },
-      { text: '只记今朝', notes: [4, 3, 2, 1, 0] },
-      // ===== 第二段（与第一段同旋律）=====
-      { text: '苍天笑', notes: [4, 3, 2, 1, 0] },
-      { text: '纷纷世上潮', notes: [2, 1, 0, 4, 3] },
-      { text: '谁负谁胜出', notes: [3, 4, 3, 4, 5] },
-      { text: '天知晓', notes: [4, 3, 2, 1, 0] },
-      // ===== 第三段 =====
-      { text: '江山笑', notes: [4, 3, 2, 1, 0] },
-      { text: '烟雨遥', notes: [2, 1, 0, 4, 3] },
-      { text: '涛浪淘尽红尘俗世', notes: [3, 4, 3, 4, 5] },
-      { text: '几多娇', notes: [4, 3, 2, 1, 0] },
-      // ===== 第四段 =====
-      { text: '清风笑', notes: [4, 3, 2, 1, 0] },
-      { text: '竟惹寂寥', notes: [2, 1, 0, 4, 3] },
-      { text: '豪情还剩了', notes: [3, 4, 3, 4, 5] },
-      { text: '一襟晚照', notes: [4, 3, 2, 1, 0] },
-      // ===== 第五段（收尾）=====
-      { text: '苍生笑', notes: [4, 3, 2, 1, 0] },
-      { text: '不再寂寥', notes: [2, 1, 0, 4, 3] },
-      { text: '豪情仍在', notes: [3, 4, 3, 4, 5] },
-      { text: '痴痴笑笑', notes: [4, 3, 2, 1, 0] },
+      { text: '沧海一声笑', notes: [6, 5, 4, 3, 2] },
+      { text: '滔滔两岸潮', notes: [4, 3, 2, 1, 0] },
+      { text: '浮沉随浪', notes: [0, 1, 0, 1, 2, 3] },
+      { text: '记今朝', notes: [6, 5, 4, 3, 2, 3] },
+      // ===== 第二段：苍天笑 =====
+      { text: '苍天笑', notes: [6, 5, 4, 3, 2] },
+      { text: '纷纷世上潮', notes: [4, 3, 2, 1, 0] },
+      { text: '谁负谁胜出', notes: [0, 1, 0, 1, 2, 3] },
+      { text: '天知晓', notes: [6, 5, 4, 3, 2] },
+      // ===== 第三段：江山笑（后半句往高处走，是全曲最高的一段）=====
+      { text: '江山笑', notes: [6, 5, 4, 3, 2] },
+      { text: '烟雨遥', notes: [4, 3, 2, 1, 0] },
+      { text: '涛浪淘尽红尘', notes: [5, 6, 5, 6, 2, 3] },
+      { text: '俗世知多少', notes: [4, 5, 6, 5, 3] },
+      // ===== 第四段：清风笑 =====
+      { text: '清风笑', notes: [6, 5, 4, 3, 2] },
+      { text: '竟惹寂寥', notes: [4, 3, 2, 1, 0] },
+      { text: '豪情还剩了', notes: [4, 3, 2, 1, 0] },
+      { text: '一襟晚照', notes: [5, 6, 5, 6, 2, 3] },
+      // ===== 第五段：苍生笑（收尾）=====
+      { text: '苍生笑', notes: [6, 5, 4, 3, 2] },
+      { text: '不再寂寥', notes: [4, 3, 2, 1, 0] },
+      { text: '豪情仍在', notes: [5, 6, 5, 6] },
+      { text: '痴痴笑笑', notes: [6, 5, 4, 3, 2] },
     ],
   },
   {
     // 黎锦晖词曲、韩德常改编。完整两段：大灰狼来敲门（不开）→ 兔妈妈回来了（就开）。
-    // 两段共用旋律，第二段只是换词——孩子弹完第一段自然就会第二段。
+    // 谱面 2/4、♩=100，几乎全是均分八分音符，句末拖住——这类儿歌的节奏本来就规整。
     id: 'tuzi', title: '小兔子乖乖', bpm: 100,
     groups: [7, 7],
     phrases: [
       // 5 1' 6 5 5 ｜ 3 5 6 1' 5 5
-      { text: '小兔子乖乖', notes: [3, 5, 4, 3, 3] },
-      { text: '把门儿开开', notes: [2, 3, 4, 5, 3, 3] },
+      { text: '小兔子乖乖', notes: [5, 7, 6, 5, 5] },
+      { text: '把门儿开开', notes: [4, 5, 6, 7, 5, 5] },
       // 6 5 3 2 ｜ 2 3 5 3 2 3 1
-      { text: '快点儿开开', notes: [4, 3, 2, 1] },
-      { text: '我要进来', notes: [1, 2, 3, 2, 1, 2, 0] },
-      { text: '不开不开我不开', notes: [4, 3, 4, 3, 2, 4, 3] },
+      { text: '快点儿开开', notes: [6, 5, 4, 3] },
+      { text: '我要进来', notes: [3, 4, 5, 4, 3, 4, 2] },
+      { text: '不开不开我不开', notes: [6, 5, 6, 5, 4, 6, 5] },
       // 5 5 3 2 1 1 ｜ 1 2 3 1
-      { text: '妈妈没回来', notes: [3, 3, 2, 1, 0, 0] },
-      { text: '谁来也不开', notes: [0, 1, 2, 0] },
+      { text: '妈妈没回来', notes: [5, 5, 4, 3, 2, 2] },
+      { text: '谁来也不开', notes: [2, 3, 4, 2] },
       // ===== 第二段：兔妈妈回来了，同旋律换词 =====
-      { text: '小兔子乖乖', notes: [3, 5, 4, 3, 3] },
-      { text: '把门儿开开', notes: [2, 3, 4, 5, 3, 3] },
-      { text: '快点儿开开', notes: [4, 3, 2, 1] },
-      { text: '我要进来', notes: [1, 2, 3, 2, 1, 2, 0] },
-      { text: '就开就开我就开', notes: [4, 3, 4, 3, 2, 4, 3] },
-      { text: '妈妈回来了', notes: [3, 3, 2, 1, 0, 0] },
-      { text: '我就把门开', notes: [0, 1, 2, 0] },
+      { text: '小兔子乖乖', notes: [5, 7, 6, 5, 5] },
+      { text: '把门儿开开', notes: [4, 5, 6, 7, 5, 5] },
+      { text: '快点儿开开', notes: [6, 5, 4, 3] },
+      { text: '我要进来', notes: [3, 4, 5, 4, 3, 4, 2] },
+      { text: '就开就开我就开', notes: [6, 5, 6, 5, 4, 6, 5] },
+      { text: '妈妈回来了', notes: [5, 5, 4, 3, 2, 2] },
+      { text: '我就把门开', notes: [2, 3, 4, 2] },
     ],
   },
   {
-    // 江苏民歌。全本一段到底（好一朵×2 → 芬芳 → 人人夸 → 摘下 → 送人 → 花呀茉莉花），
-    // 谱以义务教育音乐教材（苏少版四下）与简谱空间逐字对照版为准。
+    // 江苏民歌，4/4、♩=84。起句"好一朵美丽的"是附点节奏（3·3 5 6 1̇·1̇ 6），
+    // 这个附点就是江南小调的"软"，抹平了就变成进行曲。
     id: 'moli', title: '茉莉花', bpm: 84,
     groups: [9],
     phrases: [
-      // 3 3 5 6 1' 1' 6 ｜ 5 5 6 5（原谱附点节奏简化为均分）
-      { text: '好一朵美丽的', notes: [2, 2, 3, 4, 5, 5, 4] },
-      { text: '茉莉花', notes: [3, 3, 4, 3] },
-      { text: '好一朵美丽的', notes: [2, 2, 3, 4, 5, 5, 4] },
-      { text: '茉莉花', notes: [3, 3, 4, 3] },
-      // 5 5 5 3 5 ｜ 6 6 5
-      { text: '芬芳美丽满枝桠', notes: [3, 3, 3, 2, 3, 4, 4, 3] },
-      // 3 2 3 5 3 2 ｜ 1 1 2 1
-      { text: '又香又白人人夸', notes: [2, 1, 2, 3, 2, 1, 0, 0, 1, 0] },
-      // 3 2 1 3 2 3 ｜ 5 6 1' 5
-      { text: '让我来将你摘下', notes: [2, 1, 0, 2, 1, 2, 3, 4, 5, 3] },
-      // 2 3 5 2 3 1 6（低音 6 同八度代替）｜ 5
-      { text: '送给别人家', notes: [1, 2, 3, 1, 2, 0, 4, 3] },
-      // 2 3 1 2 1 6 ｜ 5
-      { text: '茉莉花呀茉莉花', notes: [1, 2, 0, 1, 0, 4, 3] },
+      { text: '好一朵美丽的', notes: [4, 4, 5, 6, 7, 7, 6] },
+      { text: '茉莉花', notes: [5, 5, 6, 5] },
+      { text: '好一朵美丽的', notes: [4, 4, 5, 6, 7, 7, 6] },
+      { text: '茉莉花', notes: [5, 5, 6, 5] },
+      { text: '芬芳美丽满枝桠', notes: [5, 5, 5, 4, 5, 6, 6, 5] },
+      { text: '又香又白人人夸', notes: [4, 3, 4, 5, 4, 3, 2, 2, 3, 2] },
+      { text: '让我来将你摘下', notes: [4, 3, 2, 4, 3, 4, 5, 6, 7, 5] },
+      { text: '送给别人家', notes: [3, 4, 5, 3, 4, 2, 6, 5] },
+      { text: '茉莉花呀茉莉花', notes: [3, 4, 2, 3, 2, 6, 5] },
     ],
   },
   {
-    // 完整两段：有妈的孩子像块宝 → 没妈的孩子像根草。第二段同旋律换词。
-    // 谱源：简谱空间逐字对照版（原谱低音 1、低音 6，同八度代替）。
+    // 4/4、♩=86。两段同旋律换词：有妈的孩子像块宝 → 没妈的孩子像根草。
     id: 'mama', title: '世上只有妈妈好', bpm: 86,
     groups: [4, 4],
     phrases: [
-      // 6 5 3 5 1' 6 5 ｜ 6
-      { text: '世上只有妈妈好', notes: [4, 3, 2, 3, 5, 4, 3, 4] },
-      // 3 5 6 5 3 ｜ 1' 6 5 3 2
-      { text: '有妈的孩子像块宝', notes: [2, 3, 4, 3, 2, 0, 4, 3, 2, 1] },
-      // 2 3 5 6 6 ｜ 3 2 1
-      { text: '投进妈妈的怀抱', notes: [1, 2, 3, 4, 4, 2, 1, 0] },
-      // 5 3 2 1 6 1 ｜ 5
-      { text: '幸福享不了', notes: [3, 2, 1, 0, 4, 0, 3] },
-      // ===== 第二段：同旋律换词 =====
-      { text: '世上只有妈妈好', notes: [4, 3, 2, 3, 5, 4, 3, 4] },
-      { text: '没妈的孩子像根草', notes: [2, 3, 4, 3, 2, 0, 4, 3, 2, 1] },
-      { text: '离开妈妈的怀抱', notes: [1, 2, 3, 4, 4, 2, 1, 0] },
-      { text: '幸福哪里找', notes: [3, 2, 1, 0, 4, 0, 3] },
+      { text: '世上只有妈妈好', notes: [6, 5, 4, 5, 7, 6, 5, 6] },
+      { text: '有妈的孩子像块宝', notes: [4, 5, 6, 5, 4, 2, 6, 5, 4, 3] },
+      { text: '投进妈妈的怀抱', notes: [3, 4, 5, 6, 6, 4, 3, 2] },
+      { text: '幸福享不了', notes: [5, 4, 3, 2, 6, 2, 5] },
+      // ===== 第二段 =====
+      { text: '世上只有妈妈好', notes: [6, 5, 4, 5, 7, 6, 5, 6] },
+      { text: '没妈的孩子像根草', notes: [4, 5, 6, 5, 4, 2, 6, 5, 4, 3] },
+      { text: '离开妈妈的怀抱', notes: [3, 4, 5, 6, 6, 4, 3, 2] },
+      { text: '幸福哪里找', notes: [5, 4, 3, 2, 6, 2, 5] },
     ],
   },
   {
-    // 四川民歌。完整两段：跑马山上（景）→ 李家大姐张家大哥（人）。
-    // 分节歌：第二段与第一段共用旋律。
+    // 四川民歌，4/4、♩=96。分节歌：第二段（李家大姐 / 张家大哥）与第一段同旋律。
     id: 'kangding', title: '康定情歌', bpm: 96,
     groups: [6, 6],
     phrases: [
-      // 3 5 5 6 6 5 ｜ 3（原谱装饰音已简化）
-      { text: '跑马溜溜的山上', notes: [2, 3, 3, 4, 4, 3, 2] },
-      { text: '一朵溜溜的云哟', notes: [2, 3, 3, 4, 4, 3, 2] },
-      // 3 5 5 3 2 3 2 1
-      { text: '端端溜溜的照在', notes: [2, 3, 3, 2, 1, 2, 1, 0] },
-      // …（2 6 收尾，低音 6 同八度代替）
-      { text: '康定溜溜的城哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
-      { text: '月亮弯弯', notes: [2, 3, 3, 4, 4, 3, 2] },
-      { text: '康定溜溜的城哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
-      // ===== 第二段：同旋律换词 =====
-      { text: '李家溜溜的大姐', notes: [2, 3, 3, 4, 4, 3, 2] },
-      { text: '人才溜溜的好哟', notes: [2, 3, 3, 4, 4, 3, 2] },
-      { text: '张家溜溜的大哥', notes: [2, 3, 3, 2, 1, 2, 1, 0] },
-      { text: '看上溜溜的她哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
-      { text: '月亮弯弯', notes: [2, 3, 3, 4, 4, 3, 2] },
-      { text: '看上溜溜的她哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
+      { text: '跑马溜溜的山上', notes: [4, 5, 5, 6, 6, 5, 4] },
+      { text: '一朵溜溜的云哟', notes: [4, 5, 5, 6, 6, 5, 4] },
+      { text: '端端溜溜的照在', notes: [4, 5, 5, 4, 3, 4, 3, 2] },
+      { text: '康定溜溜的城哟', notes: [4, 5, 5, 4, 3, 4, 3, 2, 3, 6] },
+      { text: '月亮弯弯', notes: [4, 5, 5, 6, 6, 5, 4] },
+      { text: '康定溜溜的城哟', notes: [4, 5, 5, 4, 3, 4, 3, 2, 3, 6] },
+      // ===== 第二段 =====
+      { text: '李家溜溜的大姐', notes: [4, 5, 5, 6, 6, 5, 4] },
+      { text: '人才溜溜的好哟', notes: [4, 5, 5, 6, 6, 5, 4] },
+      { text: '张家溜溜的大哥', notes: [4, 5, 5, 4, 3, 4, 3, 2] },
+      { text: '看上溜溜的她哟', notes: [4, 5, 5, 4, 3, 4, 3, 2, 3, 6] },
+      { text: '月亮弯弯', notes: [4, 5, 5, 6, 6, 5, 4] },
+      { text: '看上溜溜的她哟', notes: [4, 5, 5, 4, 3, 4, 3, 2, 3, 6] },
     ],
   },
 ];
 
 /**
- * 一句话里 n 个音各自的时值（单位：拍）。
+ * 节奏型：键是"这句有几个音"，值是每个音占几拍。
  *
- * 这是"有没有音乐性"的地基。原先每音一律 1 拍、句末 2 拍——那是**音阶练习**的写法：
- * 音高全对也像在按琴键考级，因为真实旋律的第一特征是长短相间（节奏），不是音程。
- * 中文歌词的节奏天然是"前短后长"：开头一两个字一口气带过，句末拖着收。
- * 所以取：前两字半拍、句末一拍半、中间每隔三个音插一个半拍，形成
- * "紧-紧-松-紧-松"的呼吸。5 音句恰好是 [.5 .5 1 .5 1.5] = 4 拍一小节，
- * 就是《沧海一声笑》"沧海一声笑"的唱法（苍-海 飞快，一 站住，声 一带，笑 拖住）。
- *
- * 注意：这里给的是**相对时值**，绝对快慢仍由速度滑块决定，两者互不干扰。
+ * 这些数值是照谱面抄的，不是估的：
+ *  - 沧海一声笑（1=A 4/4）：每句起手是「附点 + 十六分」（6·5 / 3·2），句末一个长音（1 - / 2 -）。
+ *    一小节正好 4 拍：0.75 + 0.25 + 0.5 + 0.5 + 2 = 4。
+ *    一句 5 个字里，两个字几乎连在一起、一个字要拖住、剩下两个正常走——
+ *    这一层信息一旦被抹成"每个音一样长"，旋律立刻退化成音阶练习。
+ *  - 茉莉花：起句同样是附点（3·3 5 6 1̇·1̇ 6）。江南小调那股"软"，就在这两个附点上。
+ *  - 儿歌 / 山歌（兔子、妈妈好、康定）：谱面几乎全是均分八分音符，句末拖住就对了，
+ *    用下面的通用写法，不必单独列表。
+ */
+const RHYTHMS = {
+  canghai: {
+    4: [0.75, 0.25, 0.5, 2.5],            // 6·5 3 2 1 -  （四拍一小节）
+    5: [0.75, 0.25, 0.5, 0.5, 2],
+    6: [0.75, 0.25, 0.5, 0.5, 0.5, 1.5],
+  },
+  moli: {
+    4: [0.5, 0.5, 1, 2],
+    7: [0.75, 0.25, 0.5, 0.5, 0.5, 0.5, 1],
+    8: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1.5],
+    10: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1],
+  },
+};
+
+/**
+ * 没有单独列表时的通用节奏：均分八分音符，句末拖住。
+ * 一共 4 拍（音特别多的句子会超过，这时总长就跟着音数走，不做截断）。
  */
 function rhythmOf(n) {
-  if (n <= 1) return [2];
-  const d = new Array(n).fill(1);
-  d[n - 1] = 1.5;                       // 句末拖住
-  if (n >= 3) d[0] = 0.5;               // 弱起
-  if (n >= 4) d[1] = 0.5;
-  for (let i = 2; i < n - 1; i++) if ((i - 3) % 3 === 0) d[i] = 0.5;
+  if (n <= 0) return [];
+  const d = new Array(n).fill(0.5);
+  d[n - 1] = Math.max(1, 4 - 0.5 * (n - 1));
   return d;
+}
+
+/** 某一句的实际时值：手写的 rhythm 优先，其次按曲子的节奏型，最后退回通用写法。 */
+function dursOf(def, p) {
+  const n = p.notes.length;
+  const table = def && RHYTHMS[def.id];
+  const d = p.rhythm || (table && table[n]) || rhythmOf(n);
+  // 长度对不上（改过数据却忘了改节奏表）时退回通用写法，
+  // 否则整首曲子的时间轴会从这里开始错位，越到后面偏得越多。
+  return d.length === n ? d : rhythmOf(n);
 }
 
 /**
  * 把 phrases 派生成瀑布流引擎需要的数据结构。
- * 时值由 rhythmOf() 派生；lyrics 记录每句的起始拍。
+ * 时值由 dursOf() 派生；lyrics 记录每句的起始拍。
  */
 function buildSong(def) {
   const seq = [];
@@ -1306,7 +1351,7 @@ function buildSong(def) {
   let beat = 0;
   for (const p of def.phrases) {
     lyrics.push({ beat, text: p.text });
-    const durs = p.rhythm || rhythmOf(p.notes.length);
+    const durs = dursOf(def, p);
     p.notes.forEach((k, i) => {
       const dur = durs[i] || 1;
       seq.push([k, beat, dur]);
@@ -1320,7 +1365,7 @@ SONGS.forEach(s => { SONG_MAP[s.id] = buildSong(s); });
 
 // 简谱预览（曲目卡上展示第一句，让人一眼看懂"这就是照着数字按"）
 function previewOf(def) {
-  const names = def.phrases[0].notes.map(k => NUM_LABELS[k] + (k === 5 ? '·' : ''));
+  const names = def.phrases[0].notes.map(k => noteLabel(k).replace(/<[^>]+>/g, ''));
   return names.join(' ') + ' …';
 }
 
@@ -1439,6 +1484,8 @@ function startFollow(id) {
   lastStart = { id, mode: 'follow' };
   followState.active = true;
   followState.songId = id;
+  // 换曲子 = 换谱面速度：沧海 69、兔子 100、茉莉 84…一进来就是这首该有的速度
+  applySongBpm(id);
   followState.phrase = 0;
   followState.note = 0;
   songState.active = true;
@@ -1498,17 +1545,36 @@ const beatState = { timer: 0, flashTimer: 0, el: null };
    ① 简谱把句末记成 2 拍（半音符），示范照搬，每 5 个字就要空出 1 秒多，
       整首是一顿一顿地拖；真人唱到句末只是稍微拖一点 → 改成 1.4 倍。
    ② 短演示（幽灵手）用的是"累计拍数 × 每拍"，句末 2 拍同样照搬，问题一样。 */
-const DEMO_BPM = { min: 66, max: 176, def: 107 };
-const DEMO_BPM_KEY = 'wuyin.demoBpm';
-let demoBpm = DEMO_BPM.def;
-try {
-  const v = Number(localStorage.getItem(DEMO_BPM_KEY));
-  if (v >= DEMO_BPM.min && v <= DEMO_BPM.max) demoBpm = v;
-} catch (e) {}
+/* ===== 示范速度 =====
+   每首曲子都有自己的谱面速度（沧海 69、兔子 100、茉莉 84…），一进来就用它起手——
+   这才是"网上/电视里那个速度"。滑块留在这里是为了练手（往左）和炫技（往右），
+   不是用来替代谱面速度的。
+
+   关于"每拍"和"每个音"的区别：加了节奏型之后，一个音可能只占十六分（0.25 拍）
+   或句末两拍，所以"这首多快"不再等于"每个音多快"。滑块调的始终是拍速，
+   长短比例由谱面决定，两者互不干扰：快档不会把附点压平，慢档也不会把长短抹掉。
+
+   速度按曲子分开记（wuyin.bpm.<曲 id>）：给《小兔子乖乖》调快过，不该影响《沧海一声笑》。 */
+const DEMO_BPM = { min: 50, max: 176 };
+const BPM_KEY_PREFIX = 'wuyin.bpm.';
+let demoBpm = 107;
+
+function songBpmOf(id) {
+  const def = SONG_MAP[id] ? SONG_MAP[id].bpm : 96;
+  try {
+    const v = Number(localStorage.getItem(BPM_KEY_PREFIX + id));
+    if (v >= DEMO_BPM.min && v <= DEMO_BPM.max) return v;
+  } catch (e) {}
+  return Math.max(DEMO_BPM.min, Math.min(DEMO_BPM.max, def));
+}
+
+/** 换曲子时把滑块拉回这首曲子的谱面速度 */
+function applySongBpm(id) {
+  demoBpm = songBpmOf(id);
+  if (typeof syncSpeedUI === 'function') syncSpeedUI();
+}
 
 // 每「拍」多长（ms）。demoBpm = 每分钟多少拍，直接取倒数。
-// 注意这是**拍**，不是**音**：加了 rhythmOf 之后一个音可能只占半拍或一拍半，
-// 所以"这首歌多快"不再等于"每个音多快"——这正是旋律和音阶的区别。
 function demoNoteMs() { return 60000 / demoBpm; }
 
 const rangeEl = followEl.querySelector('.f-range');
@@ -1528,11 +1594,13 @@ if (rangeEl) {
   // 边拖边重排等于每一帧都从头放一遍，听起来是一团乱响。
   rangeEl.addEventListener('input', () => {
     const v = Number(rangeEl.value);
-    demoBpm = Math.max(DEMO_BPM.min, Math.min(DEMO_BPM.max, v || DEMO_BPM.def));
+    demoBpm = Math.max(DEMO_BPM.min, Math.min(DEMO_BPM.max, v || demoBpm));
     syncSpeedUI();
   });
   rangeEl.addEventListener('change', () => {
-    try { localStorage.setItem(DEMO_BPM_KEY, String(demoBpm)); } catch (e) {}
+    try {
+      if (followState.songId) localStorage.setItem(BPM_KEY_PREFIX + followState.songId, String(demoBpm));
+    } catch (e) {}
     // 正在放示范就按新速度重来：比"下次生效"更符合直觉，也免得拉完没反应
     if (demoState.playing) {
       if (demoState.full) { finishMasterDemo(true); startMasterDemo(); }
@@ -1595,11 +1663,13 @@ function startDemo() {
       // 幽灵手：只用 demo-hit 的底部辉光，不叠整键泛光——满屏高的琴键上
       // 整键泛光会糊成一整根光柱，看起来不像"这个键被按下"
       key.classList.add('demo-hit');
-      // 尾音跟音符时值走：长音给足余韵，半拍音立刻收干（否则短音被上一条尾巴糊掉）
-      playNote(parseFloat(key.dataset.freq), 'play', vel, Math.max(0.5, Math.min(2.2, ms / 420)));
+      // 时值决定"这个音响多久"：十六分音立刻收干（否则被上一条尾巴糊掉），
+      // 句末长音撑满自己那两拍（这才是"唱"而不是"点"）
+      playNote(parseFloat(key.dataset.freq), 'play', vel,
+        Math.max(0.4, Math.min(1, ms / 700)), ms * 0.94);
       // 短演示也带和声垫：先听惯"旋律 + 伴奏"的样子，自己弹时才不会觉得空
       if (isFirst) playPad(parseFloat(key.dataset.freq),
-        (p.rhythm || rhythmOf(p.notes.length)).reduce((a, b) => a + b, 0) * noteMs);
+        dursOf(song, p).reduce((a, b) => a + b, 0) * noteMs);
       spawnRipple(key);
       // 闪光时长跟音符时值走，句末长音多留一会
       demoState.timers.push(setTimeout(() => {
@@ -1667,7 +1737,7 @@ function startMasterDemo() {
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
   // 每句总时长：和声垫要撑满整句，不能按固定长度给，否则句子一长后半句就"空"了
   const phraseMs = song.phrases.map(p =>
-    (p.rhythm || rhythmOf(p.notes.length)).reduce((a, b) => a + b, 0) * noteMs);
+    dursOf(song, p).reduce((a, b) => a + b, 0) * noteMs);
 
   // ===== 段落编曲：这段旋律要弹 5 遍，全靠"织体"分层才不会死板 =====
   // 段1 只给旋律 + 薄和声垫（把主题说清楚）→ 段2 进鼓 → 段3 全力高潮
@@ -1721,10 +1791,10 @@ function startMasterDemo() {
       const key = keyEls[k];
       key.classList.add('demo-hit');
       const freq = parseFloat(key.dataset.freq);
-      // 尾音填满这个音自己的时值：半拍音立刻收干（不糊掉下一个音），
-      // 句末长音给足余韵。音有长短这件事，一半靠时值、一半靠余音，
-      // 两者同时对，耳朵才认得出"这是一句歌"。
-      playNote(freq, 'play', vel, Math.max(0.5, Math.min(2.2, ms / 420)));
+      // 尾音填满这个音自己的时值：十六分音立刻收干（不糊掉下一个音），
+      // 句末长音撑满两拍（谱面写「1 -」就是要拖住）。音有长短这件事，
+      // 一半靠时值、一半靠余音，两者同时对，耳朵才认得出"这是一句歌"。
+      playNote(freq, 'play', vel, Math.max(0.4, Math.min(1, ms / 700)), ms * 0.94);
       // 和声垫：每句首音起一条长音托住整句，音量随段落实时加厚 / 减薄
       if (isFirst) playPad(freq, phraseMs[pi], lay.pad);
       spawnRipple(key);
@@ -1858,13 +1928,13 @@ function renderFollow() {
     // 时值写进谱面：半拍音下加一线（简谱的八分音符写法），长音右侧留白。
     // 不加这个，用户听到的长短和谱上看到的等宽就对不上——"学不会"往往
     // 不是手慢，而是谱子里根本没说哪个音要拖、哪个音要带过。
-    const durs = p.rhythm || rhythmOf(p.notes.length);
+    const durs = dursOf(song, p);
     p.notes.forEach((k, i) => {
       const span = document.createElement('span');
       const d = durs[i] || 1;
       span.className = 'f-note' + (d < 1 ? ' short' : d > 1 ? ' long' : '');
       span.style.color = KEY_COLORS[k];
-      span.innerHTML = NUM_LABELS[k] + (k === 5 ? '<sup>·</sup>' : '');
+      span.innerHTML = noteLabel(k);
       const isPast = pi < followState.phrase || (pi === followState.phrase && i < followState.note);
       const isCur = pi === followState.phrase && i === followState.note;
       if (isPast) span.classList.add('done');
@@ -1958,10 +2028,10 @@ function followJudge(idx) {
   // 弹错键：不出声地等（那个键还是会发它自己的音），不前进、不提示
   if (idx !== p.notes[followState.note]) return;
 
-  // 记下刚弹完这个音的时值：节拍提示据此把下一拍的间隔摆对。
-  // 时值取 rhythmOf 的真实值（0.5 / 1 / 1.5），不再是"句末 2 拍、其余 1 拍"——
+  // 记下刚弹完这个音的时值：节拍提示据此把下一拍摆对。
+  // 时值取谱面值（0.25 / 0.5 / 0.75 / 2 …），不再是"句末 2 拍、其余 1 拍"——
   // 否则提示音会跟示范的速度对不上，学着学着就乱了。
-  const durs = p.rhythm || rhythmOf(p.notes.length);
+  const durs = dursOf(song, p);
   const durBeats = durs[followState.note] || 1;
 
   followState.note++;
