@@ -33,20 +33,33 @@
   }
   .key:last-child { border-right: none; }
   .key .label {
-    font-size: 14px; color: rgba(255,255,255,0.25); letter-spacing: 2px; pointer-events: none;
+    font-size: 14px; color: rgba(255,255,255,0.38); letter-spacing: 2px; pointer-events: none;
     margin-bottom: 20px;
+    /* 数字在上、唱名在下：跟弹条上写的是数字，键上必须能对上 */
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  /* 数字用键自己的颜色 —— 跟弹条上哪个数字亮什么色，这里就按哪个色找键 */
+  .key .label b {
+    font-size: 20px; font-weight: 500; line-height: 1; letter-spacing: 0;
+    color: var(--color); opacity: 0.8;
+  }
+  .key .label b sup { font-size: 10px; vertical-align: super; opacity: 0.7; }
+  .key .label i {
+    font-style: normal; font-size: 11px; opacity: 0.75; letter-spacing: 1px;
   }
   .key.active { background: var(--glow); }
   .key.active .label { color: rgba(255,255,255,0.9); }
+  .key.active .label b { opacity: 1; }
+  .key.active .label i { opacity: 0.85; }
 
-  /* 每个键独立配色 */
-  .key:nth-child(1) { --glow: rgba(100,180,255,0.15); --color: #64b4ff; }
-  .key:nth-child(2) { --glow: rgba(130,220,180,0.15); --color: #82dcb4; }
-  .key:nth-child(3) { --glow: rgba(255,200,100,0.15); --color: #ffc864; }
-  .key:nth-child(4) { --glow: rgba(220,140,180,0.15); --color: #dc8cb4; }
-  .key:nth-child(5) { --glow: rgba(180,140,255,0.15); --color: #b48cff; }
+  /* 每个键独立配色。--glow 是按下时的整键底色，--pulse 是指引辉光的颜色（带透明度） */
+  .key:nth-child(1) { --glow: rgba(100,180,255,0.15); --color: #64b4ff; --pulse: rgba(100,180,255,0.55); }
+  .key:nth-child(2) { --glow: rgba(130,220,180,0.15); --color: #82dcb4; --pulse: rgba(130,220,180,0.52); }
+  .key:nth-child(3) { --glow: rgba(255,200,100,0.15); --color: #ffc864; --pulse: rgba(255,200,100,0.55); }
+  .key:nth-child(4) { --glow: rgba(220,140,180,0.15); --color: #dc8cb4; --pulse: rgba(220,140,180,0.55); }
+  .key:nth-child(5) { --glow: rgba(180,140,255,0.15); --color: #b48cff; --pulse: rgba(180,140,255,0.58); }
   /* 第 6 键是高八度的宫，沿用第 1 键的蓝，视觉上形成一次音阶循环 */
-  .key:nth-child(6) { --glow: rgba(100,180,255,0.18); --color: #7cc4ff; }
+  .key:nth-child(6) { --glow: rgba(100,180,255,0.18); --color: #7cc4ff; --pulse: rgba(124,196,255,0.58); }
 
   /* 高音标记：简谱在数字上方加点，这里用 sup 模拟 */
   .key .label sup { font-size: 9px; vertical-align: super; opacity: 0.65; margin-left: 1px; }
@@ -150,6 +163,121 @@
   #song-end button.primary {
     background: rgba(124,196,255,0.16); border-color: rgba(124,196,255,0.5); color: #a8d8ff;
   }
+
+  /* ===== 曲目面板：底部滑出 ===== */
+  #song-panel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
+    max-height: 72vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 18px 16px calc(env(safe-area-inset-bottom, 16px) + 20px);
+    border-radius: 24px 24px 0 0;
+    background: rgba(16,17,28,0.96); backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    transform: translateY(102%); transition: transform 0.38s cubic-bezier(0.22, 0.9, 0.3, 1);
+  }
+  #song-panel.show { transform: translateY(0); }
+  #song-panel .panel-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 0 6px 12px;
+  }
+  #song-panel .panel-title { font-size: 17px; letter-spacing: 4px; color: #fff; }
+  #song-panel .panel-close {
+    border: 0; background: transparent; color: rgba(255,255,255,0.45);
+    font-size: 13px; letter-spacing: 2px; cursor: pointer; padding: 6px 10px;
+  }
+  /* 曲目卡：整卡点击 = 跟弹（新手默认），右侧小按钮 = 瀑布流 */
+  .song-card {
+    display: flex; align-items: center;
+    padding: 15px 16px; margin-bottom: 10px; border-radius: 18px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer;
+  }
+  .song-card:active { background: rgba(255,255,255,0.1); }
+  .song-card .s-main { flex: 1; min-width: 0; }
+  .song-card .s-title { font-size: 16px; color: #fff; letter-spacing: 2px; }
+  .song-card .s-preview {
+    margin-top: 7px; font-size: 12px; color: rgba(255,255,255,0.42);
+    letter-spacing: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .song-card .s-fall {
+    flex-shrink: 0; margin-left: 12px; padding: 9px 14px;
+    border-radius: 16px; border: 1px solid rgba(255,255,255,0.16);
+    background: transparent; color: rgba(255,255,255,0.6); font-size: 12px; letter-spacing: 1px;
+    cursor: pointer;
+  }
+  .song-card .s-fall:active { background: rgba(255,255,255,0.1); }
+  /* 面板里的说明行 */
+  #song-panel .panel-hint {
+    padding: 0 6px 14px; font-size: 12px; color: rgba(255,255,255,0.4); letter-spacing: 1px;
+  }
+
+  /* ===== 跟弹模式：屏幕上方的简谱条 ===== */
+  #follow {
+    position: fixed; left: 50%; top: 9%; transform: translateX(-50%);
+    z-index: 35; width: min(94vw, 480px);
+    padding: 16px 18px 14px; border-radius: 22px; text-align: center;
+    background: rgba(10,10,18,0.62); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
+    opacity: 0; pointer-events: none; transition: opacity 0.45s;
+  }
+  #follow.show { opacity: 1; }
+  #follow .f-lyric {
+    font-size: 16px; letter-spacing: 5px; color: rgba(255,255,255,0.8);
+    margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-shadow: 0 0 20px rgba(124,196,255,0.45);
+  }
+  #follow .f-notes {
+    display: flex; justify-content: center; align-items: flex-end; gap: 4px;
+    min-height: 46px;
+  }
+  #follow .f-note {
+    font-size: 20px; color: rgba(255,255,255,0.35); line-height: 1;
+    padding: 8px 5px 6px; border-radius: 10px;
+    transition: transform 0.15s, color 0.15s, opacity 0.15s;
+  }
+  #follow .f-note sup { font-size: 10px; vertical-align: super; }
+  /* 已弹过的音：暗下去但保留位置。!important 压过 inline 的键色 */
+  #follow .f-note.done { color: rgba(255,255,255,0.16) !important; }
+  /* 当前音：放大 + 用琴键专属颜色点亮，颜色即"按哪个键"的直接暗示 */
+  #follow .f-note.cur {
+    transform: scale(1.5); font-weight: 600; opacity: 1;
+    text-shadow: 0 0 18px currentColor;
+  }
+  #follow .f-hint {
+    margin-top: 10px; font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.32);
+  }
+  /* 跳过/重看演示的小按钮 */
+  #follow .f-demo {
+    margin-top: 12px; padding: 7px 20px; border-radius: 16px;
+    border: 1px solid rgba(124,196,255,0.35); background: rgba(124,196,255,0.1);
+    color: #a8d8ff; font-size: 12px; letter-spacing: 2px; cursor: pointer;
+  }
+  #follow .f-demo:active { background: rgba(124,196,255,0.22); }
+
+  /* ===== 键位发光提示（跟弹模式核心引导）=====
+     下一个要弹的键直接呼吸发亮，颜色用键自己的专属色。
+     目的是让视线不用离开琴键：不用看谱面、不用数格子，亮哪儿按哪儿。
+
+     注意：这里用"底部径向辉光"而不是整键 box-shadow inset。
+     琴键是满屏高的（约 800px），inset 阴影会从上到下糊满整列，
+     看起来像一根光柱、不像"这个键亮了"。辉光只压在下半部，
+     正好是手指落点的高度，视觉上是一团光而不是一片墙。 */
+  .key.pulse::before,
+  .key.demo-hit::before {
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: 44px; height: 130px;
+    /* 椭圆半径必须显式给，且按"宽一点、矮一点"来：默认 farthest-corner 会把
+       竖向半径算成整列高度，结果又变成一根光柱。这里约 43×57px，是一团圆光。 */
+    background: radial-gradient(ellipse 66% 44% at 50% 52%, var(--pulse) 0%, transparent 72%);
+    pointer-events: none;
+  }
+  .key.pulse::before { animation: keyPulse 1.2s ease-in-out infinite; }
+  .key.demo-hit::before { opacity: 1; }   /* 幽灵手演示：稳定亮着，不闪 */
+  @keyframes keyPulse {
+    0%, 100% { opacity: 0.28; }
+    50%      { opacity: 1; }
+  }
+  .key.pulse .label b,
+  .key.demo-hit .label b { opacity: 1; text-shadow: 0 0 18px currentColor; }
 </style>
 </head>
 <body>
@@ -169,8 +297,22 @@
 <div id="tip">按住琴键横向划动 → 连奏</div>
 <canvas id="chart"></canvas>
 <div id="lyric"></div>
+<div id="follow">
+  <div class="f-lyric"></div>
+  <div class="f-notes"></div>
+  <div class="f-hint">照着发光的键弹 · 弹对了自动走</div>
+  <button class="f-demo">再看演示</button>
+</div>
+<div id="song-panel">
+  <div class="panel-head">
+    <div class="panel-title">弹一首</div>
+    <button class="panel-close">收起</button>
+  </div>
+  <div class="panel-hint">点歌名先看演示，再照着发光的键弹；「下落」是光点瀑布版</div>
+  <div id="song-list"></div>
+</div>
 <div id="song-end">
-  <div class="title">沧海一声笑</div>
+  <div class="title">曲终</div>
   <div class="sub">你弹完了</div>
   <div class="btns">
     <button id="again-btn" class="primary">再弹一次</button>
@@ -184,6 +326,8 @@
 // 五声音阶（宫商角徵羽）+ 高八度的宫，共 6 键。
 // 加第 6 键是为了让《茉莉花》那类需要高音 do 的曲子能弹下来。
 const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // C4 D4 E4 G4 A4 C5
+// 简谱数字：宫1 商2 角3 徵5 羽6 高音宫1。琴键与跟弹条共用这一份映射。
+const NUM_LABELS = ['1', '2', '3', '5', '6', '1'];
 const MOODS = {
   // decay     —— 单击时的长尾音，负责空间感
   // playDecay —— 滑音时的短尾音，负责旋律清晰度。尾音必须明显短于按键间隔，
@@ -286,9 +430,12 @@ PENTATONIC.forEach((freq, i) => {
   key.dataset.freq = freq;
   key.dataset.idx = i; // 曲目模式判定要用键序号
   const dot = i === HIGH_DOT ? '<sup>·</sup>' : '';
-  key.innerHTML = `<span class="label">${NOTE_NAMES[i]}${dot}</span>`;
+  // 数字在上（简谱，跟弹条用的就是它）、唱名在下；高音宫的数字右上角加点
+  key.innerHTML = `<span class="label"><b>${NUM_LABELS[i]}${dot}</b><i>${NOTE_NAMES[i]}</i></span>`;
   keysContainer.appendChild(key);
 });
+// 琴键引用。必须在任何 ripple 挂进 #keys 之前取，否则 children 里会混进涟漪元素
+const keyEls = Array.from(keysContainer.children);
 
 // ========== 触控处理（支持多点） ==========
 const activeTouches = new Map();
@@ -336,7 +483,11 @@ const keyVoice = new WeakMap();
 function activateKey(key, from = null) {
   // 曲目模式下，每一次按键都送进判定。按错不惩罚，但判定必须发生在
   // "是否已经 active" 的拦截之前，否则按住不放时后续音符就判不到了。
-  if (songState.active) songJudge(+key.dataset.idx);
+  // 跟弹只看"弹没弹对音"，瀑布流才看时间窗。
+  if (songState.active && !songState.finished) {
+    if (songState.mode === 'follow') followJudge(+key.dataset.idx);
+    else songJudge(+key.dataset.idx);
+  }
 
   if (key.classList.contains('active')) return;
   key.classList.add('active');
@@ -421,36 +572,107 @@ moodBtn.addEventListener('click', () => {
 
 const KEY_COLORS = ['#64b4ff', '#82dcb4', '#ffc864', '#dc8cb4', '#b48cff', '#7cc4ff'];
 
-const SONGS = {
-  canghai: {
-    title: '沧海一声笑',
-    bpm: 66,
-    // [键序号, 起始拍, 时值(拍)]
-    // 键序号：0宫C4 1商D4 2角E4 3徵G4 4羽A4 5高音宫C5
-    // 简谱对照：1→0  2→1  3→2  5→3  6→4  1'→5
-    seq: [
-      // 一「沧海一声笑」  6 5 3 2 1
-      [4, 0, 1], [3, 1, 1], [2, 2, 1], [1, 3, 1], [0, 4, 2],
-      // 二「滔滔两岸潮」  3 2 1 6 5
-      //   原曲这两个音是低八度的，本乐器音域只到 C4，用同八度代替。
-      //   走向仍是连续下行，听感成立，只是少了八度落差。
-      [2, 6, 1], [1, 7, 1], [0, 8, 1], [4, 9, 1], [3, 10, 2],
-      // 三「浮沉随浪」  5 6 5 6 1'
-      //   原曲从这里往上爬到高音 5，中间还有 1 2 3 级进；
-      //   我们只保留"摇摆两下 + 冲到最高音宫"，把顶点交给 C5，
-      //   情绪顶点反而更清楚，也不用引入更高的键。
-      [3, 12, 1], [4, 13, 1], [3, 14, 1], [4, 15, 1], [5, 16, 2],
-      // 四「只记今朝」  6 5 3 2 1  从最高点一路落回宫，收束
-      [4, 18, 1], [3, 19, 1], [2, 20, 1], [1, 21, 1], [0, 22, 2],
-    ],
-    lyrics: [
-      { beat: 0,  text: '沧海一声笑' },
-      { beat: 6,  text: '滔滔两岸潮' },
-      { beat: 12, text: '浮沉随浪' },
-      { beat: 18, text: '只记今朝' },
+/**
+ * 曲库。所有曲目都只用六键（1 2 3 5 6 1'），凡原曲出现 4、7 或低八度音的，
+ * 一律按"同八度代替"处理并在注释里说明——目标是新手能弹，不是学术考据。
+ * phrases：一句一段，notes 是键序号序列；每音 1 拍、句末音 2 拍，
+ * 由 buildSong() 派生出瀑布流需要的时间轴（seq/lyrics）。
+ */
+const SONGS = [
+  {
+    id: 'canghai', title: '沧海一声笑', bpm: 66,
+    phrases: [
+      // 6 5 3 2 1 ｜ 3 2 1 6 5（原曲这两句有低八度，同八度代替，走向仍是连续下行）
+      { text: '沧海一声笑', notes: [4, 3, 2, 1, 0] },
+      { text: '滔滔两岸潮', notes: [2, 1, 0, 4, 3] },
+      // 5 6 5 6 1'（原曲爬向高音 5，这里把顶点交给高音宫）
+      { text: '浮沉随浪', notes: [3, 4, 3, 4, 5] },
+      { text: '只记今朝', notes: [4, 3, 2, 1, 0] },
     ],
   },
-};
+  {
+    id: 'tuzi', title: '小兔子乖乖', bpm: 100,
+    phrases: [
+      // 5 1' 6 5 5 ｜ 3 5 6 1' 5 5
+      { text: '小兔子乖乖', notes: [3, 5, 4, 3, 3] },
+      { text: '把门儿开开', notes: [2, 3, 4, 5, 3, 3] },
+      // 6 5 3 2 ｜ 2 3 5 3 2 3 1
+      { text: '快点儿开开', notes: [4, 3, 2, 1] },
+      { text: '我要进来', notes: [1, 2, 3, 2, 1, 2, 0] },
+      { text: '不开不开我不开', notes: [4, 3, 4, 3, 2, 4, 3] },
+      // 5 5 3 2 1 1 ｜ 1 2 3 1
+      { text: '妈妈没回来', notes: [3, 3, 2, 1, 0, 0] },
+      { text: '谁来也不开', notes: [0, 1, 2, 0] },
+    ],
+  },
+  {
+    id: 'moli', title: '茉莉花', bpm: 84,
+    phrases: [
+      // 3 3 5 6 1' 1' 6 ｜ 5 5 6 5（江苏民歌，原谱附点节奏简化为均分）
+      { text: '好一朵美丽的', notes: [2, 2, 3, 4, 5, 5, 4] },
+      { text: '茉莉花', notes: [3, 3, 4, 3] },
+      { text: '好一朵美丽的', notes: [2, 1, 2, 3, 4, 5, 5, 4] },
+      { text: '茉莉花', notes: [3, 3, 4, 3] },
+      // 5 5 5 3 5 ｜ 6 6 5
+      { text: '芬芳美丽满枝桠', notes: [3, 3, 3, 2, 3, 4, 4, 3] },
+      // 3 2 3 5 3 2 ｜ 1 1 2 1
+      { text: '又香又白人人夸', notes: [2, 1, 2, 3, 2, 1, 0, 0, 1, 0] },
+    ],
+  },
+  {
+    id: 'mama', title: '世上只有妈妈好', bpm: 86,
+    phrases: [
+      // 6 5 3 5 1' 6 5 ｜ 6
+      { text: '世上只有妈妈好', notes: [4, 3, 2, 3, 5, 4, 3, 4] },
+      // 3 5 6 5 3 ｜ 1 6 5 3 2（原谱低音 1、低音 6，同八度代替）
+      { text: '有妈的孩子像块宝', notes: [2, 3, 4, 3, 2, 0, 4, 3, 2, 1] },
+      // 2 3 5 6 6 ｜ 3 2 1
+      { text: '投进妈妈的怀抱', notes: [1, 2, 3, 4, 4, 2, 1, 0] },
+      // 5 3 2 1 6 1 ｜ 5
+      { text: '幸福享不了', notes: [3, 2, 1, 0, 4, 0, 3] },
+    ],
+  },
+  {
+    id: 'kangding', title: '康定情歌', bpm: 96,
+    phrases: [
+      // 3 5 5 6 6 5 ｜ 3（原谱装饰音已简化）
+      { text: '跑马溜溜的山上', notes: [2, 3, 3, 4, 4, 3, 2] },
+      { text: '一朵溜溜的云哟', notes: [2, 3, 3, 4, 4, 3, 2] },
+      // 3 5 5 3 2 3 2 1
+      { text: '端端溜溜的照在', notes: [2, 3, 3, 2, 1, 2, 1, 0] },
+      { text: '月亮弯弯', notes: [2, 3, 3, 4, 4, 3, 2] },
+      // …康定溜溜的城哟（2 6 收尾，低音 6 同八度代替）
+      { text: '康定溜溜的城哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
+    ],
+  },
+];
+
+/**
+ * 把 phrases 派生成瀑布流引擎需要的数据结构。
+ * 每音 1 拍、句末音 2 拍；lyrics 记录每句的起始拍。
+ */
+function buildSong(def) {
+  const seq = [];
+  const lyrics = [];
+  let beat = 0;
+  for (const p of def.phrases) {
+    lyrics.push({ beat, text: p.text });
+    p.notes.forEach((k, i) => {
+      const dur = i === p.notes.length - 1 ? 2 : 1;
+      seq.push([k, beat, dur]);
+      beat += dur;
+    });
+  }
+  return Object.assign({}, def, { seq, lyrics });
+}
+const SONG_MAP = {};
+SONGS.forEach(s => { SONG_MAP[s.id] = buildSong(s); });
+
+// 简谱预览（曲目卡上展示第一句，让人一眼看懂"这就是照着数字按"）
+function previewOf(def) {
+  const names = def.phrases[0].notes.map(k => NUM_LABELS[k] + (k === 5 ? '·' : ''));
+  return names.join(' ') + ' …';
+}
 
 // 下落速度三档。sec = 音符从屏幕顶部落到判定线所用秒数，win = 判定窗口 ±秒。
 // 两者必须成对出现：速度越快，视觉上留给你反应的时间越短，
@@ -475,10 +697,10 @@ const songBtn = document.getElementById('song-btn');
 const songEndEl = document.getElementById('song-end');
 
 const songState = {
-  active: false, finished: false,
+  active: false, finished: false, mode: 'fall',
   startTime: 0, endT: 0, spb: 1,
   notes: [], fx: [], lyricIdx: 0,
-  song: null, raf: 0,
+  song: null, songId: null, raf: 0,
 };
 
 // 当前按住的键，用于"按住不放也算命中"的宽容判定
@@ -500,15 +722,18 @@ function resizeChart() {
   geom.speed = geom.judgeY / fallPreset.sec;
 }
 
-function startSong() {
+function startSong(id) {
   if (!isAudioStarted) {
     initAudio();
     document.getElementById('overlay').classList.add('hidden');
   }
-  const song = SONGS.canghai;
+  const song = SONG_MAP[id] || SONG_MAP.canghai;
+  lastStart = { id, mode: 'fall' };
   const spb = 60 / song.bpm;
 
   songState.song = song;
+  songState.songId = id;
+  songState.mode = 'fall';
   songState.spb = spb;
   songState.notes = song.seq.map(([k, beat, dur]) => ({
     k, t: beat * spb, dur: dur * spb, hit: false, missed: false, hitAt: 0,
@@ -526,11 +751,13 @@ function startSong() {
   resizeChart();
   chartEl.classList.add('show');
   speedEl.classList.add('show');
+  followEl.classList.remove('show');
   songBtn.textContent = '结束';
   songBtn.classList.add('on');
   songEndEl.classList.remove('show');
   lyricEl.classList.remove('show');
   document.getElementById('tip').classList.remove('show');
+  songEndEl.querySelector('.title').textContent = song.title;
 
   // 第一次进来的人不知道要干什么，先给一句规则说明；
   // 第一个乐句的歌词（提前 0.35s 触发）会自然把它顶掉
@@ -540,12 +767,183 @@ function startSong() {
   songState.raf = requestAnimationFrame(chartLoop);
 }
 
+// ===== 跟弹模式：看一眼弹一个音，弹对自动走，零失败 =====
+// 和瀑布流的分工：瀑布流教"节奏"，跟弹教"音在哪"。
+// 零基础第一次请走跟弹——它没有任何时间压力，按错了也只是不出声地等。
+const followEl = document.getElementById('follow');
+const followState = { active: false, songId: null, phrase: 0, note: 0 };
+
+function startFollow(id) {
+  if (!isAudioStarted) {
+    initAudio();
+    document.getElementById('overlay').classList.add('hidden');
+  }
+  const song = SONG_MAP[id] || SONG_MAP.canghai;
+  lastStart = { id, mode: 'follow' };
+  followState.active = true;
+  followState.songId = id;
+  followState.phrase = 0;
+  followState.note = 0;
+  songState.active = true;
+  songState.finished = false;
+  songState.mode = 'follow';
+  songState.song = song;
+  songState.songId = id;
+  pressed.clear();
+
+  chartEl.classList.remove('show');
+  speedEl.classList.remove('show');
+  lyricEl.classList.remove('show');
+  followEl.classList.add('show');
+  songBtn.textContent = '结束';
+  songBtn.classList.add('on');
+  songEndEl.classList.remove('show');
+  songEndEl.querySelector('.title').textContent = song.title;
+  document.getElementById('tip').classList.remove('show');
+
+  renderFollow();
+
+  // 幽灵手演示：第一次弹某首曲子时，琴键自己按一遍给你看。
+  // 不知道"目标长什么样"才是新手最大的迷茫——先看，再弹。
+  // 同一首曲子只演示一次，「再看演示」按钮随时可以重看。
+  if (!demoDone[id]) startDemo();
+}
+
+// ===== 幽灵手演示：琴键自动弹一遍 =====
+// 用 setTimeout 排时间轴（按 bpm 换算），每个音：键闪 + 出声 + 简谱条同步高亮。
+// 演示期间 followState.active = false，用户乱按不会推进进度、不会打断演示。
+const demoState = { timers: [], playing: false };
+const demoDone = {};   // 每首曲子只自动演示一次（本次会话内）
+const demoBtn = followEl.querySelector('.f-demo');
+
+function stopDemoTimers() {
+  demoState.timers.forEach(clearTimeout);
+  demoState.timers = [];
+}
+
+function startDemo() {
+  stopDemoTimers();
+  followState.active = false;   // 演示期间判定关闭
+  followState.phrase = 0;
+  followState.note = 0;
+  demoState.playing = true;
+  demoBtn.textContent = '跳过 · 我来弹';
+  followEl.querySelector('.f-hint').textContent = '先看一遍：注意哪个键在亮';
+
+  const song = SONG_MAP[followState.songId];
+  const spb = 60 / song.bpm;
+  // seq 第 i 个音对应第几个乐句的第几个音，演示时简谱条跟着走到那个位置
+  const posMap = [];
+  song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
+
+  song.seq.forEach(([k, beat, dur], i) => {
+    demoState.timers.push(setTimeout(() => {
+      if (!demoState.playing) return;
+      followState.phrase = posMap[i].pi;
+      followState.note = posMap[i].ni;
+      renderFollow();
+      const key = keyEls[k];
+      // 幽灵手：只用 demo-hit 的底部辉光，不叠整键泛光——满屏高的琴键上
+      // 整键泛光会糊成一整根光柱，看起来不像"这个键被按下"
+      key.classList.add('demo-hit');
+      playNote(parseFloat(key.dataset.freq), 'play');
+      spawnRipple(key);
+      // 闪光时长跟音符时值走，句末长音多留一会
+      demoState.timers.push(setTimeout(() => {
+        if (!demoState.playing) return;
+        key.classList.remove('demo-hit');
+      }, Math.min(dur * spb * 0.72, 0.55) * 1000));
+    }, beat * spb * 1000 + 300));   // 300ms 起始缓冲，让界面先落定
+  });
+
+  const last = song.seq[song.seq.length - 1];
+  const total = (last[1] + last[2]) * spb * 1000 + 300 + 250;
+  demoState.timers.push(setTimeout(() => {
+    if (demoState.playing) finishDemo(false);
+  }, total));
+}
+
+function finishDemo(skipped) {
+  demoState.playing = false;
+  stopDemoTimers();
+  // 跳过时可能还残留着演示加上的闪光（ removal 定时器被清了），统一灭掉
+  keyEls.forEach(el => el.classList.remove('active', 'demo-hit'));
+  demoDone[followState.songId] = true;
+  demoBtn.textContent = '再看演示';
+  followState.active = true;
+  followState.phrase = 0;
+  followState.note = 0;
+  renderFollow();
+  followEl.querySelector('.f-hint').textContent =
+    skipped ? '好，你来！照着发光的键弹' : '看好了？照着发光的键弹！';
+}
+
+demoBtn.addEventListener('click', () => {
+  if (demoState.playing) finishDemo(true);   // 演示中点它 = 跳过
+  else startDemo();                          // 平时点它 = 重看
+});
+
+function renderFollow() {
+  const song = SONG_MAP[followState.songId];
+  const p = song.phrases[followState.phrase];
+  followEl.querySelector('.f-lyric').textContent = p.text;
+  const wrap = followEl.querySelector('.f-notes');
+  wrap.innerHTML = '';
+  p.notes.forEach((k, i) => {
+    const span = document.createElement('span');
+    span.className = 'f-note';
+    span.style.color = KEY_COLORS[k];
+    span.innerHTML = NUM_LABELS[k] + (k === 5 ? '<sup>·</sup>' : '');
+    if (i < followState.note) span.classList.add('done');
+    if (i === followState.note) span.classList.add('cur');
+    wrap.appendChild(span);
+  });
+
+  // 键位发光：下一个要弹的键直接在琴键上呼吸发亮。
+  // 这是比简谱条更强的引导——简谱条告诉"按哪个音"，发光告诉"手放哪里"。
+  // 演示播放中（followState.active = false）不发光，避免和演示按键的闪光打架。
+  keyEls.forEach(el => el.classList.remove('pulse'));
+  if (followState.active && followState.note < p.notes.length) {
+    keyEls[p.notes[followState.note]].classList.add('pulse');
+  }
+}
+
+function followJudge(idx) {
+  if (!followState.active) return;
+  const song = SONG_MAP[followState.songId];
+  const p = song.phrases[followState.phrase];
+  // 弹错键：不出声地等（那个键还是会发它自己的音），不前进、不提示
+  if (idx !== p.notes[followState.note]) return;
+
+  followState.note++;
+  if (followState.note >= p.notes.length) {
+    followState.phrase++;
+    followState.note = 0;
+    if (followState.phrase >= song.phrases.length) {
+      // 全曲完成：先把画面停在"最后一句全部弹完"的状态再收，phrase 不能越界
+      followState.active = false;
+      songState.finished = true;
+      followState.phrase = song.phrases.length - 1;
+      followState.note = song.phrases[followState.phrase].notes.length;
+      renderFollow();
+      setTimeout(() => { endSong(); songEndEl.classList.add('show'); }, 800);
+      return;
+    }
+  }
+  renderFollow();
+}
+
 function endSong() {
   songState.active = false;
+  followState.active = false;
+  demoState.playing = false;
+  stopDemoTimers();
   cancelAnimationFrame(songState.raf);
   chartEl.classList.remove('show');
   speedEl.classList.remove('show');
   lyricEl.classList.remove('show');
+  followEl.classList.remove('show');
+  keyEls.forEach(el => { el.classList.remove('pulse', 'active', 'demo-hit'); });
   songBtn.textContent = '弹一首';
   songBtn.classList.remove('on');
   pressed.clear();
@@ -783,14 +1181,49 @@ try {
   setFall(1, false);
 }
 
+// ===== 曲目面板 =====
+const panelEl = document.getElementById('song-panel');
+const listEl = document.getElementById('song-list');
+
+function buildPanel() {
+  listEl.innerHTML = '';
+  SONGS.forEach(def => {
+    const card = document.createElement('div');
+    card.className = 'song-card';
+    card.innerHTML =
+      '<div class="s-main">' +
+        `<div class="s-title">${def.title}</div>` +
+        `<div class="s-preview">${previewOf(def)}</div>` +
+      '</div>' +
+      '<button class="s-fall">下落</button>';
+    card.addEventListener('click', e => {
+      // 整卡 = 跟弹（新手默认）；「下落」小按钮 = 瀑布流
+      closePanel();
+      const fallBtn = e.target.closest ? e.target.closest('.s-fall') : null;
+      if (fallBtn) startSong(def.id);
+      else startFollow(def.id);
+    });
+    listEl.appendChild(card);
+  });
+}
+
+function openPanel() { buildPanel(); panelEl.classList.add('show'); }
+function closePanel() { panelEl.classList.remove('show'); }
+panelEl.querySelector('.panel-close').addEventListener('click', closePanel);
+
+// 记住最近一次的曲目和模式，「再弹一次」直接照原样重来
+let lastStart = { id: 'canghai', mode: 'follow' };
+
 songBtn.addEventListener('click', () => {
   if (songState.active) { endSong(); songEndEl.classList.remove('show'); }
-  else startSong();
+  else if (panelEl.classList.contains('show')) closePanel();
+  else openPanel();
 });
 
 document.getElementById('again-btn').addEventListener('click', () => {
   songEndEl.classList.remove('show');
-  startSong();
+  if (lastStart.mode === 'follow') startFollow(lastStart.id);
+  else startSong(lastStart.id);
 });
 document.getElementById('quit-btn').addEventListener('click', () => {
   songEndEl.classList.remove('show');
