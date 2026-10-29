@@ -2,7 +2,15 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
+<!-- 全屏：Android/微信走 Fullscreen API；iPhone 的 Safari 不支持对网页全屏，
+     只能靠"添加到主屏幕"，届时这两条 meta 会让它以无地址栏的全屏方式启动。
+     status-bar-style=black-translucent 让状态栏透明、内容延伸上去（配合 env(safe-area-inset-*)）。 -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="五声·触">
+<meta name="theme-color" content="#0a0a12">
 <title>五声·触</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -96,6 +104,37 @@
     letter-spacing: 2px; cursor: pointer; backdrop-filter: blur(8px);
   }
   #rot-toggle:active { background: rgba(255,255,255,0.15); }
+
+  /* 全屏开关：和上面两个按钮竖排。全屏时文案变「退出全屏」，需要能一眼找到，
+     所以用 .on 状态高亮，位置固定在右上角最外侧不被琴键的手挡住 */
+  #fs-toggle {
+    position: fixed; z-index: 50;
+    top: calc(max(env(safe-area-inset-top, 12px), 12px) + 84px); right: 16px;
+    padding: 8px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px;
+    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6); font-size: 12px;
+    letter-spacing: 2px; cursor: pointer; backdrop-filter: blur(8px);
+  }
+  #fs-toggle:active { background: rgba(255,255,255,0.15); }
+  #fs-toggle.on {
+    color: #a8d8ff; border-color: rgba(124,196,255,0.45); background: rgba(124,196,255,0.12);
+  }
+
+  /* 全屏不可用时的说明条（iPhone Safari、部分微信版本）。
+     只在点了没反应时出现几秒，不打扰正常使用。 */
+  #fs-hint {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+    transform: translateX(-50%) translateY(8px); z-index: 90;
+    /* 必须给确定宽度：fixed 元素的宽度是 shrink-to-fit，中文又能在任意字间断行，
+       不给宽度它会缩成一条窄柱、每行只放五六个字，读起来像电报 */
+    width: 86vw; max-width: 360px;
+    padding: 11px 16px; border-radius: 16px;
+    background: rgba(10,10,18,0.92); border: 1px solid rgba(255,255,255,0.14);
+    backdrop-filter: blur(12px);
+    color: rgba(255,255,255,0.8); font-size: 12px; line-height: 1.75; letter-spacing: 0.3px;
+    text-align: center; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s, transform 0.3s;
+  }
+  #fs-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* 首次进入的操作提示，5 秒后自动隐去 */
   #tip {
@@ -413,6 +452,7 @@
 
 <button id="mood-toggle">氛围：空灵</button>
 <button id="rot-toggle">横屏</button>
+<button id="fs-toggle">全屏</button>
 <button id="song-btn">弹一首</button>
 <div id="speed">
   <button data-i="0">慢</button>
@@ -1564,6 +1604,78 @@ if (mqLand.addEventListener) mqLand.addEventListener('change', applyLayoutMode);
 else if (mqLand.addListener) mqLand.addListener(applyLayoutMode);  // 老 Safari 只认 addListener
 applyLayoutMode();
 
+/* ===== 全屏开关 =====
+   手机上那排地址栏和底部工具栏，CSS 去不掉，只能走 Fullscreen API。
+   各平台支持差别很大，所以这里只承诺"能全屏就真全屏，不能就告诉用户怎么绕"：
+   - Android Chrome / 微信（X5 内核）：支持，调用即真全屏
+   - iPhone Safari：不支持对普通网页全屏（只有 <video> 可以），点了会失败
+     → 弹一条说明，指路「分享 → 添加到主屏幕」，从桌面图标启动就是无地址栏全屏
+   - iPad Safari 16.4+：支持
+   状态一律以 fullscreenchange 事件为准，不在点击时自己猜——
+   用户按 ESC、安卓返回手势、微信返回键都能退全屏，按钮文案必须跟着回来。 */
+const fsBtn = document.getElementById('fs-toggle');
+
+function fsElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement ||
+         document.msFullscreenElement || null;
+}
+
+function syncFsBtn() {
+  if (!fsBtn) return;
+  const on = !!fsElement();
+  fsBtn.textContent = on ? '退出全屏' : '全屏';
+  fsBtn.classList.toggle('on', on);
+  scheduleChartResize(80);   // 全屏后视口尺寸变了，瀑布流画布要重算
+}
+
+function showFsHint(msg) {
+  let t = document.getElementById('fs-hint');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'fs-hint';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showFsHint.timer);
+  showFsHint.timer = setTimeout(() => t.classList.remove('show'), 4600);
+}
+
+async function enterFullscreen(silent) {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (!req) {
+    if (!silent) showFsHint('这台浏览器不支持网页全屏。iPhone 请点下方「分享」→「添加到主屏幕」，从桌面图标打开就没有地址栏了');
+    return false;
+  }
+  try {
+    await req.call(el, { navigationUI: 'hide' });
+    syncFsBtn();
+    return true;
+  } catch (e) {
+    if (!silent) showFsHint('全屏被拦住了。微信里点右上角「⋯」→「在浏览器打开」再试；iPhone 的 Safari 不支持网页全屏，请点「分享」→「添加到主屏幕」，从桌面图标打开');
+    return false;
+  }
+}
+
+async function exitFullscreen() {
+  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+  try { if (exit) await exit.call(document); } catch (e) { /* 可能已经退出了 */ }
+  syncFsBtn();
+}
+
+if (fsBtn) fsBtn.addEventListener('click', () => {
+  if (fsElement()) exitFullscreen(); else enterFullscreen(false);
+});
+
+// ESC / 返回手势 / 系统收起全屏，都走这个事件同步按钮
+if (document.addEventListener) {
+  ['fullscreenchange', 'webkitfullscreenchange', 'MSFullscreenChange'].forEach(ev => {
+    document.addEventListener(ev, syncFsBtn);
+  });
+}
+syncFsBtn();
+
 // ========== 启动入口 ==========
 function showTip() {
   const tip = document.getElementById('tip');
@@ -1576,6 +1688,9 @@ document.getElementById('start-btn').addEventListener('click', () => {
   initAudio();
   document.getElementById('overlay').classList.add('hidden');
   showTip();
+  // 点「开始」这一下本来就在用户手势里，顺手进全屏。
+  // 静默失败：不支持的机型别用弹窗打断，用户想弄清原因自己点右上角「全屏」。
+  enterFullscreen(true);
 });
 </script>
 </body>
