@@ -7,6 +7,9 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; font-family: system-ui, sans-serif; }
+  /* 横屏时左侧谱面栏的宽度：窄屏（667px 宽的横屏）也要留住 6 个键的宽度，
+     所以下限 256px、上限 320px，中间跟视口走 */
+  :root { --col: clamp(256px, 34vw, 320px); }
 
   /* 启动遮罩 */
   #overlay {
@@ -95,8 +98,10 @@
   #tip.show { opacity: 1; }
 
   /* ===== 瀑布流谱面 ===== */
+  /* 画布由 JS 定位到"琴键区"的实际矩形（竖屏=全屏，横屏=右半边），
+     所以这里只锚左上角，left/top/width/height 全部交给 resizeChart 写入 */
   #chart {
-    position: fixed; inset: 0; z-index: 30; pointer-events: none;
+    position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none;
     opacity: 0; transition: opacity 0.45s;
   }
   #chart.show { opacity: 1; }
@@ -193,7 +198,14 @@
   }
   .song-card:active { background: rgba(255,255,255,0.1); }
   .song-card .s-main { flex: 1; min-width: 0; }
-  .song-card .s-title { font-size: 16px; color: #fff; letter-spacing: 2px; }
+  .song-card .s-title {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 16px; color: #fff; letter-spacing: 2px;
+  }
+  /* 「全曲 · 5 段 20 句」：选曲时就能确认这是完整版，而不是节选 */
+  .song-card .s-meta {
+    font-size: 10px; letter-spacing: 0.5px; color: rgba(255,255,255,0.32); flex-shrink: 0;
+  }
   .song-card .s-preview {
     margin-top: 7px; font-size: 12px; color: rgba(255,255,255,0.42);
     letter-spacing: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -219,28 +231,57 @@
     border: 1px solid rgba(255,255,255,0.1);
     opacity: 0; pointer-events: none; transition: opacity 0.45s;
   }
-  #follow.show { opacity: 1; }
-  #follow .f-lyric {
-    font-size: 16px; letter-spacing: 5px; color: rgba(255,255,255,0.8);
-    margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    text-shadow: 0 0 20px rgba(124,196,255,0.45);
+  #follow.show { opacity: 1; pointer-events: auto; }
+  /* ===== 跟弹简谱表：滚动窗口一次只呈现 4 句，弹到哪滑到哪 ===== */
+  #follow .f-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 4px; padding-bottom: 7px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
   }
-  #follow .f-notes {
-    display: flex; justify-content: center; align-items: flex-end; gap: 4px;
-    min-height: 46px;
+  #follow .f-song {
+    font-size: 13px; letter-spacing: 3px; color: rgba(255,255,255,0.85);
+    text-shadow: 0 0 14px rgba(124,196,255,0.4);
+  }
+  #follow .f-prog { font-size: 10.5px; letter-spacing: 1px; color: rgba(255,255,255,0.4); }
+  /* 窗口固定 4 句，高度恒定，不需要滚动：原先的 max-height + 滚动条会因
+     1px 取整溢出而常驻一条细滚动条，看着像"没做完"，直接按内容撑开 */
+  #follow .f-sheet { overflow: visible; }
+  #follow .f-row {
+    display: flex; align-items: center; gap: 10px; padding: 5px 2px;
+  }
+  #follow .f-row + .f-row { border-top: 1px dashed rgba(255,255,255,0.07); }
+  /* 全曲化的歌都分段落（沧海五段、兔子两段…）：段落之间留白 + 取消虚线，
+     让"第几段"一眼可辨——歌词书里也是这么排的 */
+  #follow .f-row.verse-start { margin-top: 10px; border-top: none; }
+  /* 弹完的整句：整行变暗，但保留位置，能看出"已经唱到这了" */
+  #follow .f-row.done-row { opacity: 0.32; }
+  /* 滚动窗口的省略行：窗口上下各一句"⋯"，表示前面/后面还有内容没画出来 */
+  #follow .f-more {
+    text-align: center; font-size: 10px; letter-spacing: 7px;
+    color: rgba(255,255,255,0.22); padding: 2px 0 0; line-height: 1;
+  }
+  #follow .r-lyric {
+    /* 8.5em ≈ 98px：容得下最长 8 字歌词（「涛浪淘尽红尘俗世」），
+       再窄就会出省略号——曲名句子被截断，新手就看不懂这句该怎么唱了 */
+    flex-shrink: 0; width: 8.5em; text-align: right;
+    font-size: 11.5px; letter-spacing: 0.5px; color: rgba(255,255,255,0.55);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #follow .r-notes {
+    display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-end;
   }
   #follow .f-note {
-    font-size: 20px; color: rgba(255,255,255,0.35); line-height: 1;
-    padding: 8px 5px 6px; border-radius: 10px;
+    font-size: 17px; color: rgba(255,255,255,0.35); line-height: 1;
+    padding: 5px 4px 4px; border-radius: 8px;
     transition: transform 0.15s, color 0.15s, opacity 0.15s;
   }
-  #follow .f-note sup { font-size: 10px; vertical-align: super; }
+  #follow .f-note sup { font-size: 9px; vertical-align: super; }
   /* 已弹过的音：暗下去但保留位置。!important 压过 inline 的键色 */
   #follow .f-note.done { color: rgba(255,255,255,0.16) !important; }
   /* 当前音：放大 + 用琴键专属颜色点亮，颜色即"按哪个键"的直接暗示 */
   #follow .f-note.cur {
-    transform: scale(1.5); font-weight: 600; opacity: 1;
-    text-shadow: 0 0 18px currentColor;
+    transform: scale(1.45); font-weight: 600; opacity: 1;
+    text-shadow: 0 0 16px currentColor;
   }
   #follow .f-hint {
     margin-top: 10px; font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.32);
@@ -278,6 +319,56 @@
   }
   .key.pulse .label b,
   .key.demo-hit .label b { opacity: 1; text-shadow: 0 0 18px currentColor; }
+
+  /* ===== 横屏：左侧谱面栏 + 右侧琴键 =====
+     竖屏保持原样（谱面浮在琴键上方，键铺满整屏）。
+     横屏高度只有 320~430px，谱面若仍浮在琴键上会盖住 1~2 个键、那几个键就按不到了，
+     所以读谱时改成左右分栏：左边读谱、右边弹奏，互不遮挡；琴键仍是竖向长条，手感不变。
+     自由弹奏和瀑布流不读谱，就保持满屏琴键（body 没有 sheet-mode 时）。 */
+  @media (orientation: landscape) {
+    body.sheet-mode #keys {
+      width: calc(100% - var(--col));
+      margin-left: var(--col);
+    }
+    .key { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+    .key .label { margin-bottom: 8px; }
+    .key .label b { font-size: 17px; }
+    .key .label i { font-size: 10px; }
+
+    /* 「氛围」跟着谱面栏走，免得浮在琴键上误触（自由弹奏时它还在右上角） */
+    body.sheet-mode #mood-toggle { left: auto; right: calc(100% - var(--col) + 12px); }
+
+    /* 跟弹面板：左栏居中。速度档在跟弹模式本是隐藏的（opacity:0 + 不可点），
+       所以不会和它打架，也不会挡住琴键 */
+    #follow {
+      left: 12px; top: 50%; transform: translateY(-50%);
+      width: calc(var(--col) - 24px);
+      max-height: calc(100% - 70px); overflow-y: auto;
+      padding: 13px 14px 12px; border-radius: 18px; text-align: left;
+    }
+    #follow .f-row { gap: 7px; padding: 4px 0; }
+    #follow .r-lyric { width: 6.6em; font-size: 10.5px; }
+    #follow .f-note { font-size: 15px; padding: 4px 3px 3px; }
+    #follow .f-song { font-size: 12px; letter-spacing: 2px; }
+    #follow .f-prog { font-size: 10px; }
+    #follow .f-hint { margin-top: 8px; font-size: 10px; letter-spacing: 1.5px; }
+    #follow .f-demo { margin-top: 9px; padding: 6px 16px; font-size: 11px; letter-spacing: 1.5px; }
+
+    /* 选曲面板：横屏高度只有 390px，单列只能露 3 张卡，改两列一屏放下 5 首；
+       卡片同步压矮，否则两列省下的高度又被行高吃掉、还是会冒滚动条 */
+    #song-panel {
+      max-height: 94vh;
+      padding: 12px 14px calc(env(safe-area-inset-bottom, 12px) + 12px);
+    }
+    #song-panel .panel-head { padding: 0 4px 8px; }
+    #song-panel .panel-title { font-size: 15px; }
+    #song-panel .panel-hint { padding: 0 4px 10px; font-size: 11px; }
+    #song-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    .song-card { padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; }
+    .song-card .s-title { font-size: 15px; }
+    .song-card .s-preview { margin-top: 5px; }
+    .song-card .s-fall { padding: 7px 12px; }
+  }
 </style>
 </head>
 <body>
@@ -298,8 +389,8 @@
 <canvas id="chart"></canvas>
 <div id="lyric"></div>
 <div id="follow">
-  <div class="f-lyric"></div>
-  <div class="f-notes"></div>
+  <div class="f-head"><span class="f-song"></span><span class="f-prog"></span></div>
+  <div class="f-sheet"></div>
   <div class="f-hint">照着发光的键弹 · 弹对了自动走</div>
   <button class="f-demo">再看演示</button>
 </div>
@@ -308,7 +399,7 @@
     <div class="panel-title">弹一首</div>
     <button class="panel-close">收起</button>
   </div>
-  <div class="panel-hint">点歌名先看演示，再照着发光的键弹；「下落」是光点瀑布版</div>
+  <div class="panel-hint">点歌名先看演示，再照发光键弹；「下落」是瀑布版</div>
   <div id="song-list"></div>
 </div>
 <div id="song-end">
@@ -580,7 +671,10 @@ const KEY_COLORS = ['#64b4ff', '#82dcb4', '#ffc864', '#dc8cb4', '#b48cff', '#7cc
  */
 const SONGS = [
   {
+    // 黄霑词曲。全曲五段共用同一个「逐级下行」旋律动机，这是它最适合新手的原因：
+    // 学会一段 = 学会全曲。groups 告诉简谱表在哪里分段留白。
     id: 'canghai', title: '沧海一声笑', bpm: 66,
+    groups: [4, 4, 4, 4, 4],
     phrases: [
       // 6 5 3 2 1 ｜ 3 2 1 6 5（原曲这两句有低八度，同八度代替，走向仍是连续下行）
       { text: '沧海一声笑', notes: [4, 3, 2, 1, 0] },
@@ -588,10 +682,33 @@ const SONGS = [
       // 5 6 5 6 1'（原曲爬向高音 5，这里把顶点交给高音宫）
       { text: '浮沉随浪', notes: [3, 4, 3, 4, 5] },
       { text: '只记今朝', notes: [4, 3, 2, 1, 0] },
+      // ===== 第二段（与第一段同旋律）=====
+      { text: '苍天笑', notes: [4, 3, 2, 1, 0] },
+      { text: '纷纷世上潮', notes: [2, 1, 0, 4, 3] },
+      { text: '谁负谁胜出', notes: [3, 4, 3, 4, 5] },
+      { text: '天知晓', notes: [4, 3, 2, 1, 0] },
+      // ===== 第三段 =====
+      { text: '江山笑', notes: [4, 3, 2, 1, 0] },
+      { text: '烟雨遥', notes: [2, 1, 0, 4, 3] },
+      { text: '涛浪淘尽红尘俗世', notes: [3, 4, 3, 4, 5] },
+      { text: '几多娇', notes: [4, 3, 2, 1, 0] },
+      // ===== 第四段 =====
+      { text: '清风笑', notes: [4, 3, 2, 1, 0] },
+      { text: '竟惹寂寥', notes: [2, 1, 0, 4, 3] },
+      { text: '豪情还剩了', notes: [3, 4, 3, 4, 5] },
+      { text: '一襟晚照', notes: [4, 3, 2, 1, 0] },
+      // ===== 第五段（收尾）=====
+      { text: '苍生笑', notes: [4, 3, 2, 1, 0] },
+      { text: '不再寂寥', notes: [2, 1, 0, 4, 3] },
+      { text: '豪情仍在', notes: [3, 4, 3, 4, 5] },
+      { text: '痴痴笑笑', notes: [4, 3, 2, 1, 0] },
     ],
   },
   {
+    // 黎锦晖词曲、韩德常改编。完整两段：大灰狼来敲门（不开）→ 兔妈妈回来了（就开）。
+    // 两段共用旋律，第二段只是换词——孩子弹完第一段自然就会第二段。
     id: 'tuzi', title: '小兔子乖乖', bpm: 100,
+    groups: [7, 7],
     phrases: [
       // 5 1' 6 5 5 ｜ 3 5 6 1' 5 5
       { text: '小兔子乖乖', notes: [3, 5, 4, 3, 3] },
@@ -603,46 +720,82 @@ const SONGS = [
       // 5 5 3 2 1 1 ｜ 1 2 3 1
       { text: '妈妈没回来', notes: [3, 3, 2, 1, 0, 0] },
       { text: '谁来也不开', notes: [0, 1, 2, 0] },
+      // ===== 第二段：兔妈妈回来了，同旋律换词 =====
+      { text: '小兔子乖乖', notes: [3, 5, 4, 3, 3] },
+      { text: '把门儿开开', notes: [2, 3, 4, 5, 3, 3] },
+      { text: '快点儿开开', notes: [4, 3, 2, 1] },
+      { text: '我要进来', notes: [1, 2, 3, 2, 1, 2, 0] },
+      { text: '就开就开我就开', notes: [4, 3, 4, 3, 2, 4, 3] },
+      { text: '妈妈回来了', notes: [3, 3, 2, 1, 0, 0] },
+      { text: '我就把门开', notes: [0, 1, 2, 0] },
     ],
   },
   {
+    // 江苏民歌。全本一段到底（好一朵×2 → 芬芳 → 人人夸 → 摘下 → 送人 → 花呀茉莉花），
+    // 谱以义务教育音乐教材（苏少版四下）与简谱空间逐字对照版为准。
     id: 'moli', title: '茉莉花', bpm: 84,
+    groups: [9],
     phrases: [
-      // 3 3 5 6 1' 1' 6 ｜ 5 5 6 5（江苏民歌，原谱附点节奏简化为均分）
+      // 3 3 5 6 1' 1' 6 ｜ 5 5 6 5（原谱附点节奏简化为均分）
       { text: '好一朵美丽的', notes: [2, 2, 3, 4, 5, 5, 4] },
       { text: '茉莉花', notes: [3, 3, 4, 3] },
-      { text: '好一朵美丽的', notes: [2, 1, 2, 3, 4, 5, 5, 4] },
+      { text: '好一朵美丽的', notes: [2, 2, 3, 4, 5, 5, 4] },
       { text: '茉莉花', notes: [3, 3, 4, 3] },
       // 5 5 5 3 5 ｜ 6 6 5
       { text: '芬芳美丽满枝桠', notes: [3, 3, 3, 2, 3, 4, 4, 3] },
       // 3 2 3 5 3 2 ｜ 1 1 2 1
       { text: '又香又白人人夸', notes: [2, 1, 2, 3, 2, 1, 0, 0, 1, 0] },
+      // 3 2 1 3 2 3 ｜ 5 6 1' 5
+      { text: '让我来将你摘下', notes: [2, 1, 0, 2, 1, 2, 3, 4, 5, 3] },
+      // 2 3 5 2 3 1 6（低音 6 同八度代替）｜ 5
+      { text: '送给别人家', notes: [1, 2, 3, 1, 2, 0, 4, 3] },
+      // 2 3 1 2 1 6 ｜ 5
+      { text: '茉莉花呀茉莉花', notes: [1, 2, 0, 1, 0, 4, 3] },
     ],
   },
   {
+    // 完整两段：有妈的孩子像块宝 → 没妈的孩子像根草。第二段同旋律换词。
+    // 谱源：简谱空间逐字对照版（原谱低音 1、低音 6，同八度代替）。
     id: 'mama', title: '世上只有妈妈好', bpm: 86,
+    groups: [4, 4],
     phrases: [
       // 6 5 3 5 1' 6 5 ｜ 6
       { text: '世上只有妈妈好', notes: [4, 3, 2, 3, 5, 4, 3, 4] },
-      // 3 5 6 5 3 ｜ 1 6 5 3 2（原谱低音 1、低音 6，同八度代替）
+      // 3 5 6 5 3 ｜ 1' 6 5 3 2
       { text: '有妈的孩子像块宝', notes: [2, 3, 4, 3, 2, 0, 4, 3, 2, 1] },
       // 2 3 5 6 6 ｜ 3 2 1
       { text: '投进妈妈的怀抱', notes: [1, 2, 3, 4, 4, 2, 1, 0] },
       // 5 3 2 1 6 1 ｜ 5
       { text: '幸福享不了', notes: [3, 2, 1, 0, 4, 0, 3] },
+      // ===== 第二段：同旋律换词 =====
+      { text: '世上只有妈妈好', notes: [4, 3, 2, 3, 5, 4, 3, 4] },
+      { text: '没妈的孩子像根草', notes: [2, 3, 4, 3, 2, 0, 4, 3, 2, 1] },
+      { text: '离开妈妈的怀抱', notes: [1, 2, 3, 4, 4, 2, 1, 0] },
+      { text: '幸福哪里找', notes: [3, 2, 1, 0, 4, 0, 3] },
     ],
   },
   {
+    // 四川民歌。完整两段：跑马山上（景）→ 李家大姐张家大哥（人）。
+    // 分节歌：第二段与第一段共用旋律。
     id: 'kangding', title: '康定情歌', bpm: 96,
+    groups: [6, 6],
     phrases: [
       // 3 5 5 6 6 5 ｜ 3（原谱装饰音已简化）
       { text: '跑马溜溜的山上', notes: [2, 3, 3, 4, 4, 3, 2] },
       { text: '一朵溜溜的云哟', notes: [2, 3, 3, 4, 4, 3, 2] },
       // 3 5 5 3 2 3 2 1
       { text: '端端溜溜的照在', notes: [2, 3, 3, 2, 1, 2, 1, 0] },
-      { text: '月亮弯弯', notes: [2, 3, 3, 4, 4, 3, 2] },
-      // …康定溜溜的城哟（2 6 收尾，低音 6 同八度代替）
+      // …（2 6 收尾，低音 6 同八度代替）
       { text: '康定溜溜的城哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
+      { text: '月亮弯弯', notes: [2, 3, 3, 4, 4, 3, 2] },
+      { text: '康定溜溜的城哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
+      // ===== 第二段：同旋律换词 =====
+      { text: '李家溜溜的大姐', notes: [2, 3, 3, 4, 4, 3, 2] },
+      { text: '人才溜溜的好哟', notes: [2, 3, 3, 4, 4, 3, 2] },
+      { text: '张家溜溜的大哥', notes: [2, 3, 3, 2, 1, 2, 1, 0] },
+      { text: '看上溜溜的她哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
+      { text: '月亮弯弯', notes: [2, 3, 3, 4, 4, 3, 2] },
+      { text: '看上溜溜的她哟', notes: [2, 3, 3, 2, 1, 2, 1, 0, 1, 4] },
     ],
   },
 ];
@@ -705,14 +858,22 @@ const songState = {
 
 // 当前按住的键，用于"按住不放也算命中"的宽容判定
 const pressed = new Set();
-const geom = { W: 0, H: 0, judgeY: 0, keyW: 0, speed: 0 };
+const geom = { W: 0, H: 0, x: 0, y: 0, judgeY: 0, keyW: 0, speed: 0 };
 
 function resizeChart() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  geom.W = window.innerWidth;
-  geom.H = window.innerHeight;
+  // 谱面只铺在"琴键区"上：竖屏时键区就是整屏，横屏时是右侧那半边。
+  // 直接读 #keys 的真实矩形，就不用为两种朝向各写一套几何公式，
+  // 旋转屏幕时也只要重跑这个函数（resize 事件已挂在下面）。
+  const r = keysContainer.getBoundingClientRect();
+  geom.W = r.width;
+  geom.H = r.height;
+  geom.x = r.left;
+  geom.y = r.top;
   chartEl.width = Math.round(geom.W * dpr);
   chartEl.height = Math.round(geom.H * dpr);
+  chartEl.style.left = geom.x + 'px';
+  chartEl.style.top = geom.y + 'px';
   chartEl.style.width = geom.W + 'px';
   chartEl.style.height = geom.H + 'px';
   cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -748,6 +909,8 @@ function startSong(id) {
   // 清掉上个模式残留的按住状态，否则进曲目时会白白送掉几个音符
   pressed.clear();
 
+  // 瀑布流不读谱：横屏时把左栏还给琴键（不带 sheet-mode 就是满屏琴键）
+  document.body.classList.remove('sheet-mode');
   resizeChart();
   chartEl.classList.add('show');
   speedEl.classList.add('show');
@@ -790,6 +953,8 @@ function startFollow(id) {
   songState.song = song;
   songState.songId = id;
   pressed.clear();
+  // 读谱模式：横屏时右移琴键、左栏留给谱面
+  document.body.classList.add('sheet-mode');
 
   chartEl.classList.remove('show');
   speedEl.classList.remove('show');
@@ -836,7 +1001,13 @@ function startDemo() {
   const posMap = [];
   song.phrases.forEach((p, pi) => p.notes.forEach((_, ni) => posMap.push({ pi, ni })));
 
-  song.seq.forEach(([k, beat, dur], i) => {
+  // 全曲化之后整首演示太长（沧海五段要一分多钟），演示只放第一段：
+  // 第一段听懂旋律、看懂玩法就够了。beat 取自 seq，截取前缀节拍依然正确。
+  const firstVerse = song.groups ? song.groups[0] : song.phrases.length;
+  const demoSeq = song.seq.filter((_, i) => posMap[i].pi < firstVerse);
+  const demoPos = posMap.filter(p => p.pi < firstVerse);
+
+  demoSeq.forEach(([k, beat, dur], i) => {
     demoState.timers.push(setTimeout(() => {
       if (!demoState.playing) return;
       followState.phrase = posMap[i].pi;
@@ -856,7 +1027,7 @@ function startDemo() {
     }, beat * spb * 1000 + 300));   // 300ms 起始缓冲，让界面先落定
   });
 
-  const last = song.seq[song.seq.length - 1];
+  const last = demoSeq[demoSeq.length - 1];
   const total = (last[1] + last[2]) * spb * 1000 + 300 + 250;
   demoState.timers.push(setTimeout(() => {
     if (demoState.playing) finishDemo(false);
@@ -874,8 +1045,9 @@ function finishDemo(skipped) {
   followState.phrase = 0;
   followState.note = 0;
   renderFollow();
+  // 演示只放第一段（全曲太长），文案要说清楚，否则新手会以为整首都演示过了
   followEl.querySelector('.f-hint').textContent =
-    skipped ? '好，你来！照着发光的键弹' : '看好了？照着发光的键弹！';
+    skipped ? '好，你来！照着发光的键弹' : '第一段听懂了？接着往下弹，亮哪儿按哪儿';
 }
 
 demoBtn.addEventListener('click', () => {
@@ -885,26 +1057,97 @@ demoBtn.addEventListener('click', () => {
 
 function renderFollow() {
   const song = SONG_MAP[followState.songId];
-  const p = song.phrases[followState.phrase];
-  followEl.querySelector('.f-lyric').textContent = p.text;
-  const wrap = followEl.querySelector('.f-notes');
-  wrap.innerHTML = '';
-  p.notes.forEach((k, i) => {
-    const span = document.createElement('span');
-    span.className = 'f-note';
-    span.style.color = KEY_COLORS[k];
-    span.innerHTML = NUM_LABELS[k] + (k === 5 ? '<sup>·</sup>' : '');
-    if (i < followState.note) span.classList.add('done');
-    if (i === followState.note) span.classList.add('cur');
-    wrap.appendChild(span);
-  });
+  const sheet = followEl.querySelector('.f-sheet');
+  sheet.innerHTML = '';
+
+  // 表头：曲名 + 进度。窗口一次只画 4 句，"弹到第几句 / 全曲共几句"就全靠这里可读，
+  // 尤其全曲化之后（沧海 20 句），没有进度数字很容易失去耐心。
+  followEl.querySelector('.f-song').textContent = song.title;
+  const total = song.phrases.length;
+  // 进度 = 当前正在弹的句子序号。句弹完 phrase 会 +1，正好指向下一句；
+  // 全曲结束时 phrase 已被钳在末句，用 note 越界判断收尾为 total。
+  const atEnd = songState.finished ||
+    (followState.phrase === total - 1 && followState.note >= song.phrases[total - 1].notes.length);
+  const cur = atEnd ? total : Math.min(followState.phrase + 1, total);
+  followEl.querySelector('.f-prog').textContent = '第 ' + cur + ' / ' + total + ' 句';
+
+  // 段落起点集合：groups = [4,4,4,...] 表示每段几句，新段第一行加 verse-start
+  const verseStarts = new Set();
+  if (song.groups) {
+    let acc = 0;
+    song.groups.forEach(g => { verseStarts.add(acc); acc += g; });
+  }
+
+  // ===== 滚动窗口：一屏只放 4 句，弹到哪滑到哪 =====
+  // 前面弹完的句子退出窗口、后面的句子接续进来，视线永远聚焦在"现在和接下来"。
+  // 全曲感交给表头进度「第 X / Y 句」承担，不再靠把 20 句全部铺在屏上。
+  const WINDOW = 4;
+  let winStart;
+  if (atEnd) {
+    // 全曲收尾：停在最后 4 句，整屏变暗的"弹完了"比跳回中间更自然
+    winStart = Math.max(0, total - WINDOW);
+  } else {
+    // 当前句尽量落在窗口第 2 行：上面留 1 句已弹的作对照，下面留 2~3 句"接下来"
+    winStart = Math.max(0, Math.min(followState.phrase - 1, total - WINDOW));
+  }
+  const winEnd = Math.min(winStart + WINDOW, total);
+
+  // 窗口边界放一句「⋯」，表示还有内容没画出来（开头/结尾处不放）
+  if (winStart > 0) {
+    const more = document.createElement('div');
+    more.className = 'f-more';
+    more.textContent = '⋯⋯⋯';
+    sheet.appendChild(more);
+  }
+  for (let pi = winStart; pi < winEnd; pi++) {
+    const p = song.phrases[pi];
+    const row = document.createElement('div');
+    row.className = 'f-row';
+    if (verseStarts.has(pi) && pi > 0) row.classList.add('verse-start');
+    // 整句弹完（含最后一句收尾）→ 整行变暗
+    if (pi < followState.phrase ||
+        (pi === followState.phrase && followState.note >= p.notes.length)) {
+      row.classList.add('done-row');
+    }
+
+    const ly = document.createElement('span');
+    ly.className = 'r-lyric';
+    ly.textContent = p.text;
+
+    const ns = document.createElement('span');
+    ns.className = 'r-notes';
+    p.notes.forEach((k, i) => {
+      const span = document.createElement('span');
+      span.className = 'f-note';
+      span.style.color = KEY_COLORS[k];
+      span.innerHTML = NUM_LABELS[k] + (k === 5 ? '<sup>·</sup>' : '');
+      const isPast = pi < followState.phrase || (pi === followState.phrase && i < followState.note);
+      const isCur = pi === followState.phrase && i === followState.note;
+      if (isPast) span.classList.add('done');
+      if (isCur) span.classList.add('cur');
+      ns.appendChild(span);
+    });
+
+    row.appendChild(ly);
+    row.appendChild(ns);
+    sheet.appendChild(row);
+  }
+  if (winEnd < total) {
+    const more = document.createElement('div');
+    more.className = 'f-more';
+    more.textContent = '⋯⋯⋯';
+    sheet.appendChild(more);
+  }
 
   // 键位发光：下一个要弹的键直接在琴键上呼吸发亮。
   // 这是比简谱条更强的引导——简谱条告诉"按哪个音"，发光告诉"手放哪里"。
   // 演示播放中（followState.active = false）不发光，避免和演示按键的闪光打架。
   keyEls.forEach(el => el.classList.remove('pulse'));
-  if (followState.active && followState.note < p.notes.length) {
-    keyEls[p.notes[followState.note]].classList.add('pulse');
+  if (followState.active) {
+    const p = song.phrases[followState.phrase];
+    if (p && followState.note < p.notes.length) {
+      keyEls[p.notes[followState.note]].classList.add('pulse');
+    }
   }
 }
 
@@ -946,11 +1189,22 @@ function endSong() {
   keyEls.forEach(el => { el.classList.remove('pulse', 'active', 'demo-hit'); });
   songBtn.textContent = '弹一首';
   songBtn.classList.remove('on');
+  // 自由弹奏是"满屏琴键"的形态，横屏左栏也一并收回
+  document.body.classList.remove('sheet-mode');
   pressed.clear();
 }
 
+let frameTick = 0;
+
 function chartLoop() {
   if (!songState.active) return;
+  // 尺寸自愈：旋转屏幕时 resize / orientationchange 不一定都到（iOS 地址栏收放、
+  // 分屏拖拽都会漏）。每 16 帧对一次键区真实尺寸，对不上就重算——
+  // 这样无论事件来不来，音符都不会和琴键错位。
+  if ((frameTick++ & 15) === 0) {
+    const r = keysContainer.getBoundingClientRect();
+    if (Math.abs(r.width - geom.W) > 1 || Math.abs(r.height - geom.H) > 1) resizeChart();
+  }
   // 不用 rAF 回调自带的时间戳：它在部分环境下（headless、虚拟时间）
   // 与 performance.now() 不同源，会让音符位置整体偏移半个屏幕。
   const elapsed = (performance.now() - songState.startTime) / 1000;
@@ -1192,7 +1446,8 @@ function buildPanel() {
     card.className = 'song-card';
     card.innerHTML =
       '<div class="s-main">' +
-        `<div class="s-title">${def.title}</div>` +
+        // 单段曲目不写「1 段」（茉莉花全本一段到底，写出来反而怪）
+        `<div class="s-title">${def.title}<span class="s-meta">全曲${def.groups.length > 1 ? ` ${def.groups.length} 段 ·` : ' ·'} ${def.phrases.length} 句</span></div>` +
         `<div class="s-preview">${previewOf(def)}</div>` +
       '</div>' +
       '<button class="s-fall">下落</button>';
@@ -1229,7 +1484,16 @@ document.getElementById('quit-btn').addEventListener('click', () => {
   songEndEl.classList.remove('show');
 });
 
-window.addEventListener('resize', () => { if (songState.active) resizeChart(); });
+// 尺寸变化后重算谱面。必须延后一拍：resize 事件常在布局还没落定时就触发，
+// 那时 getBoundingClientRect 还是旧值，画布会按旧宽高画、和琴键错位。
+let chartResizeTimer = 0;
+function scheduleChartResize(delay) {
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => { if (songState.active) resizeChart(); }, delay);
+}
+window.addEventListener('resize', () => scheduleChartResize(80));
+// 手机旋转：iOS 的地址栏收放会让尺寸连跳几次，给长一点的延迟再补一次
+window.addEventListener('orientationchange', () => scheduleChartResize(260));
 
 // ========== 启动入口 ==========
 function showTip() {
